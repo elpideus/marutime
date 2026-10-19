@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/scripts/migrate.ts",
+    "migrate:deploy": "tsx src/scripts/migrate-deploy.ts",
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
