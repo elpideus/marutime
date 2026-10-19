@@ -20,8 +20,8 @@ export type WatchedButtonProps = {
   characters?: CheckInCharacter[];
   guestCharacters?: CheckInCharacter[];
   size?: 'sm' | 'md' | 'lg';
-  /** `full` adds separate Edit and Rewatch buttons; `compact` is the toggle alone. */
-  variant?: 'full' | 'compact';
+  /** `full` adds separate Edit and Rewatch buttons; `row` adds an icon-only Edit (for lists); `compact` is the toggle alone. */
+  variant?: 'full' | 'row' | 'compact';
   className?: string;
 };
 
@@ -67,9 +67,23 @@ export function WatchedButton({ target, watched, watchCount, serverAt, lastWatch
   const iconSize: ButtonSize = size === 'lg' ? 'icon-lg' : size === 'sm' ? 'icon-sm' : 'icon';
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div className={cn('flex items-center gap-2', variant === 'row' && 'gap-1.5', className)}>
+      {variant === 'row' ? (
+        // Left of the toggle, so the toggle stays put when this appears.
+        <AnimatePresence initial={false}>
+          {isWatched ? (
+            <motion.div key="edit" initial={{ opacity: 0, scale: 0.5, x: 8 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.12 } }} transition={springs.bouncy}>
+              <Tooltip content="Edit your check-in">
+                <motion.button type="button" whileTap={{ scale: 0.88 }} transition={springs.snappy} onClick={edit} aria-label={`Edit your check-in for ${target.label}`} className={buttonClasses({ variant: 'ghost', size: iconSize })}>
+                  <Pencil className="size-4" />
+                </motion.button>
+              </Tooltip>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      ) : null}
       <Tooltip content={isWatched ? (state.count > 1 ? `Watched ${state.count} times. Click to mark as unwatched` : 'Click to mark as unwatched') : 'Mark as watched'} shortcut={primary ? watchedKeys : undefined} disabled={!checkIn.signedIn}>
-        <WatchToggle watched={isWatched} count={state.count} pending={Boolean(state.pending)} size={size} compact={variant === 'compact'} onClick={toggle} />
+        <WatchToggle watched={isWatched} count={state.count} pending={Boolean(state.pending)} size={size} compact={variant !== 'full'} onClick={toggle} />
       </Tooltip>
       {variant === 'full' ? (
         <AnimatePresence initial={false}>

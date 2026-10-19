@@ -15,6 +15,8 @@ import type {
   SeasonDetails,
   ShowDetails,
   TrendingWindow,
+  ExternalMatches,
+  ExternalSource,
 } from '../types';
 import { slugify } from '../util';
 
@@ -60,7 +62,7 @@ const SHOWS: ShowDetails[] = [
     provider: 'fixture',
     externalId: 1,
     imdbId: null,
-    tvdbId: null,
+    tvdbId: 9001,
     title: 'Harbor Lights',
     originalTitle: 'Harbor Lights',
     slug: slugify('Harbor Lights'),
@@ -105,7 +107,7 @@ const SHOWS: ShowDetails[] = [
     provider: 'fixture',
     externalId: 2,
     imdbId: null,
-    tvdbId: null,
+    tvdbId: 9002,
     title: 'Paper Lantern Academy',
     originalTitle: '紙提灯学園',
     slug: slugify('Paper Lantern Academy'),
@@ -146,7 +148,7 @@ const SHOWS: ShowDetails[] = [
     provider: 'fixture',
     externalId: 3,
     imdbId: null,
-    tvdbId: null,
+    tvdbId: 9003,
     title: 'Endless Tide',
     originalTitle: '終わらない潮',
     slug: slugify('Endless Tide'),
@@ -194,6 +196,46 @@ const SHOWS: ShowDetails[] = [
       return { externalId: 30 + n, seasonNumber: n, name: ['East Sea', 'Grand Current', 'New World'][n - 1]!, overview: null, posterPath: null, airDate: start, episodeCount: 150, episodes: episodes(n, 150, start, 30000 + n * 1000).map((e) => ({ ...e, runtime: 24 })) };
     }),
   },
+  // A long-running procedural: 24 seasons, for layouts that must cope with many seasons.
+  (() => {
+    const seasonStart = (n: number) => `${1990 + n}-09-15`;
+    const numbers = Array.from({ length: 24 }, (_, i) => i + 1);
+    return {
+      type: 'show' as const,
+      provider: 'fixture',
+      externalId: 4,
+      imdbId: null,
+      tvdbId: 9004,
+      title: 'Precinct Nine',
+      originalTitle: 'Precinct Nine',
+      slug: slugify('Precinct Nine'),
+      overview: 'Two dozen years of cases at the busiest station house in a fictional city.',
+      tagline: 'Every shift has a story.',
+      posterPath: null,
+      backdropPath: null,
+      releaseDate: seasonStart(1),
+      lastAirDate: '2015-05-20',
+      nextEpisodeAirDate: null,
+      status: 'Ended',
+      genres: [{ id: 80, name: 'Crime' }, { id: 18, name: 'Drama' }],
+      networks: [{ id: 3, name: 'Fixture Broadcasting', logoPath: null }],
+      originCountries: ['US'],
+      originalLanguage: 'en',
+      isAnime: false,
+      popularity: 120,
+      voteAverage: 7.8,
+      voteCount: 900,
+      homepage: null,
+      trailerKey: null,
+      certification: 'TV-14',
+      cast: cast([['Captain Ortiz', 'Dana Wells'], ['Detective Hale', 'Marcus Lee']], 7000),
+      episodeRuntime: 44,
+      seasonCount: 24,
+      episodeCount: 96,
+      seasons: numbers.map((n) => ({ externalId: 400 + n, seasonNumber: n, name: `Season ${n}`, overview: null, posterPath: null, airDate: seasonStart(n), episodeCount: 4 })),
+      seasonDetails: numbers.map((n) => ({ externalId: 400 + n, seasonNumber: n, name: `Season ${n}`, overview: null, posterPath: null, airDate: seasonStart(n), episodeCount: 4, episodes: episodes(n, 4, seasonStart(n), 40000 + n * 100) })),
+    } satisfies ShowDetails;
+  })(),
 ];
 
 const MOVIES: MovieDetails[] = [
@@ -201,7 +243,7 @@ const MOVIES: MovieDetails[] = [
     type: 'movie',
     provider: 'fixture',
     externalId: 101,
-    imdbId: null,
+    imdbId: 'tt9000101',
     title: 'The Quiet Orbit',
     originalTitle: 'The Quiet Orbit',
     slug: slugify('The Quiet Orbit'),
@@ -231,7 +273,7 @@ const MOVIES: MovieDetails[] = [
     type: 'movie',
     provider: 'fixture',
     externalId: 102,
-    imdbId: null,
+    imdbId: 'tt9000102',
     title: 'Summer of the Fox',
     originalTitle: '狐の夏',
     slug: slugify('Summer of the Fox'),
@@ -331,6 +373,21 @@ export class FixtureProvider implements MetadataProvider {
   async getMovie(externalId: number): Promise<MovieDetails | null> {
     const m = MOVIES.find((x) => x.externalId === externalId);
     return m ? structuredClone(m) : null;
+  }
+
+  /** Fixture TheTVDB episode ids are `showTvdbId * 10000 + season * 1000 + episode`. */
+  async findByExternalId(source: ExternalSource, id: string | number): Promise<ExternalMatches> {
+    const none: ExternalMatches = { shows: [], movies: [], episodes: [] };
+    if (source === 'imdb') return { ...none, movies: MOVIES.filter((m) => m.imdbId === String(id)).map((m) => m.externalId) };
+    const n = Number(id);
+    const show = SHOWS.find((x) => x.tvdbId === n);
+    if (show) return { ...none, shows: [show.externalId] };
+    const owner = SHOWS.find((x) => x.tvdbId === Math.floor(n / 10000));
+    if (!owner) return none;
+    const seasonNumber = Math.floor((n % 10000) / 1000);
+    const episodeNumber = n % 1000;
+    const exists = owner.seasonDetails.some((d) => d.seasonNumber === seasonNumber && d.episodes.some((e) => e.episodeNumber === episodeNumber));
+    return exists ? { ...none, episodes: [{ showId: owner.externalId, seasonNumber, episodeNumber }] } : none;
   }
 
   async getEpisodeGuestStars(showExternalId: number, seasonNumber: number, episodeNumber: number): Promise<CastMember[]> {

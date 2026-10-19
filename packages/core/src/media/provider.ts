@@ -44,6 +44,8 @@ export function getProvider(inner: MetadataProvider = getMetadataProvider()): Me
     getPerson: (externalId) =>
       cached(`${ns}:person:${externalId}`, { ttl: TTL.week, staleTtl: 4 * TTL.week, persist: true, nullTtl: TTL.day }, () => inner.getPerson(externalId)),
     getGenres: (type) => cached(`${ns}:genres:${type}`, { ttl: 4 * TTL.week, staleTtl: 12 * TTL.week, persist: true }, () => inner.getGenres(type)),
+    // Cross-database ids practically never change.
+    findByExternalId: (source, id) => cached(`${ns}:find:${source}:${id}`, { ttl: 8 * TTL.week, staleTtl: 26 * TTL.week, persist: true }, () => inner.findByExternalId(source, id)),
   };
   wrapped.set(inner, provider);
   return provider;

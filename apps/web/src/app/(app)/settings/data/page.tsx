@@ -1,9 +1,10 @@
-import { listExportRequests } from '@marutime/core';
+import { listExportRequests, listImportJobs } from '@marutime/core';
 import { getDb } from '@marutime/db';
 import { Button, Island, IslandHeader } from '@marutime/ui';
 import { FileJson, FileSpreadsheet } from 'lucide-react';
 import type { Metadata } from 'next';
 import { DeleteAccountForm } from '@/components/settings/account-forms';
+import { ImportPanel } from '@/components/settings/import-panel';
 import { formatBytes, formatDateTime } from '@/lib/format';
 import { requireUser } from '@/lib/session';
 
@@ -11,9 +12,11 @@ export const metadata: Metadata = { title: 'Your data' };
 
 export default async function DataSettingsPage() {
   const user = await requireUser('/settings/data');
-  const exports = await listExportRequests(getDb(), user.id);
+  const db = getDb();
+  const [exports, imports] = await Promise.all([listExportRequests(db, user.id), listImportJobs(db, user.id)]);
   return (
     <div className="flex flex-col gap-6">
+      <ImportPanel initialJobs={imports} />
       <Island>
         <IslandHeader title="Download your data" description="Everything MaruTime holds about you: profile, check-ins (with your private details), shows you follow, watchlist, lists, comments and account metadata." />
         <div className="flex flex-wrap gap-2">

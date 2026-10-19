@@ -25,7 +25,7 @@ function describe(n: Awaited<ReturnType<typeof getNotifications>>[number]): { te
     case 'export_ready':
       return { text: 'Your data export is ready to download', href: '/settings/data' };
     default:
-      return { text: String(p.message ?? 'Notification'), href: '#' };
+      return { text: String(p.message ?? 'Notification'), href: typeof p.href === 'string' && p.href.startsWith('/') ? p.href : '#' };
   }
 }
 

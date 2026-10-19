@@ -31,6 +31,7 @@ export default async function PrivacyPage() {
           'Database: a managed PostgreSQL provider configured by the operator (for example Neon). Backups are stored encrypted in object storage configured by the operator (for example Cloudflare R2).',
           'Images you upload: object storage configured by the operator (for example Cloudflare R2). EXIF metadata, including GPS location, is removed on upload.',
           'Title metadata and artwork: The Movie Database (TMDB) and AniList. Your browser loads poster images directly from their image servers, which see your IP address like any website asset. We never send them your account data.',
+          'Imports (only when you start one): a TV Time export is unpacked in your browser and only your watch history, follows, watchlist and lists are sent to MaruTime; the rest of the file never leaves your device. An AniList import asks AniList for the public list of the username you enter, and uses the public Fribb/anime-lists mapping (GitHub) to match titles.',
           "Trailers: on large screens, title pages can play the trailer in the background using YouTube's privacy-enhanced player (youtube-nocookie.com, Google). Your browser then connects to Google, which sees your IP address. Signed-in users can switch this off in Settings → Privacy & preferences; the Trailer button always works on demand.",
           'Email (only if enabled by the operator): a transactional email provider such as Resend, used for verification, password resets and export notices.',
         ]}

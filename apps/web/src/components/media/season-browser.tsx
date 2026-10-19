@@ -193,7 +193,7 @@ const EpisodeRow = memo(function EpisodeRow({ media, episode: e, today, reveal, 
         {unaired ? (
           <span className="rounded-pill border border-border px-2 py-1 text-[11px] text-fg-subtle">Upcoming</span>
         ) : (
-          <WatchedButton target={target} watched={serverCount > 0} watchCount={serverCount} serverAt={serverAt} characters={characters} size="sm" variant="compact" />
+          <WatchedButton target={target} watched={serverCount > 0} watchCount={serverCount} serverAt={serverAt} characters={characters} size="sm" variant="row" />
         )}
       </div>
     </motion.li>

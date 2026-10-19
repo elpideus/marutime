@@ -155,6 +155,15 @@ export type PagedResult<T> = { page: number; totalPages: number; totalResults: n
 
 export type TrendingWindow = 'day' | 'week';
 
+/** Other databases a record can be looked up by. */
+export type ExternalSource = 'tvdb' | 'imdb';
+/** What an external id points at, in this provider's ids (TheTVDB ids can name a show or an episode). */
+export type ExternalMatches = {
+  shows: number[];
+  movies: number[];
+  episodes: Array<{ showId: number; seasonNumber: number; episodeNumber: number }>;
+};
+
 export type DiscoverCategory = 'shows' | 'movies' | 'anime';
 export type DiscoverSort = 'trending' | 'popular' | 'top_rated' | 'upcoming' | 'airing' | 'newest';
 
@@ -173,6 +182,7 @@ export interface MetadataProvider {
   getEpisodeGuestStars(showExternalId: number, seasonNumber: number, episodeNumber: number): Promise<CastMember[]>;
   getPerson(externalId: number): Promise<PersonDetails | null>;
   getGenres(type: MediaType): Promise<Genre[]>;
+  findByExternalId(source: ExternalSource, id: string | number): Promise<ExternalMatches>;
 }
 
 export type SeasonSelection = number[] | 'all' | ((seasons: SeasonSummary[]) => number[]);

@@ -1,6 +1,6 @@
 import { purgeExpiredSessions } from '@marutime/auth';
 import { getEnv } from '@marutime/config';
-import { pruneCache, refreshStaleMedia } from '@marutime/core';
+import { backfillAnimeEnrichment, pruneCache, refreshStaleMedia } from '@marutime/core';
 import { getDb, loginAttempts, lt } from '@marutime/db';
 import { NextResponse } from 'next/server';
 
@@ -13,10 +13,11 @@ export async function GET(request: Request) {
   if (!secret || request.headers.get('authorization') !== `Bearer ${secret}`) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const db = getDb();
   const media = await refreshStaleMedia(db, 25);
+  const anime = await backfillAnimeEnrichment(db, { limit: 15, budgetMs: 15_000 }).catch(() => null);
   const sessions = await purgeExpiredSessions(db);
   const attempts = await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000))).returning({ id: loginAttempts.id });
   const cache = await pruneCache(db).catch(() => 0);
-  return NextResponse.json({ media, purgedSessions: sessions, purgedLoginAttempts: attempts.length, prunedCacheEntries: cache });
+  return NextResponse.json({ media, anime, purgedSessions: sessions, purgedLoginAttempts: attempts.length, prunedCacheEntries: cache });
 }
 
 export const POST = GET;

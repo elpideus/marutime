@@ -10,6 +10,7 @@ import {
   devices,
   episodes,
   eq,
+  importJobs,
   listItems,
   listLikes,
   lists,
@@ -107,6 +108,11 @@ export async function buildUserExport(db: DbExecutor, userId: string): Promise<R
   const oauthRows = await db.select({ provider: oauthAccounts.provider, email: oauthAccounts.email, createdAt: oauthAccounts.createdAt }).from(oauthAccounts).where(eq(oauthAccounts.userId, userId));
   const tokenRows = await db.select({ name: apiTokens.name, prefix: apiTokens.prefix, scopes: apiTokens.scopes, createdAt: apiTokens.createdAt, lastUsedAt: apiTokens.lastUsedAt, revokedAt: apiTokens.revokedAt }).from(apiTokens).where(eq(apiTokens.userId, userId));
   const reportRows = await db.select().from(reports).where(and(eq(reports.reporterId, userId)));
+  const importRows = await db
+    .select({ source: importJobs.source, label: importJobs.label, status: importJobs.status, stats: importJobs.stats, createdAt: importJobs.createdAt, finishedAt: importJobs.finishedAt })
+    .from(importJobs)
+    .where(eq(importJobs.userId, userId))
+    .orderBy(desc(importJobs.createdAt));
 
   return {
     format: 'marutime-user-export',
@@ -124,6 +130,7 @@ export async function buildUserExport(db: DbExecutor, userId: string): Promise<R
     notifications: notificationRows,
     account: { sessions: sessionRows, linkedAccounts: oauthRows, apiTokens: tokenRows },
     reportsFiled: reportRows,
+    imports: importRows,
   };
 }
 

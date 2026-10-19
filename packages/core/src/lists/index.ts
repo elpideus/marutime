@@ -168,7 +168,7 @@ async function inferCategory(db: DbExecutor, listId: string): Promise<ListCatego
   return 'mixed';
 }
 
-async function refreshListCounts(db: DbExecutor, listId: string): Promise<void> {
+export async function refreshListCounts(db: DbExecutor, listId: string): Promise<void> {
   const [c] = await db.select({ n: count() }).from(listItems).where(eq(listItems.listId, listId));
   await db.update(lists).set({ itemCount: c?.n ?? 0, category: await inferCategory(db, listId), updatedAt: new Date() }).where(eq(lists.id, listId));
 }

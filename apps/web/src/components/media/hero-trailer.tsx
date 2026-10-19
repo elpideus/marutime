@@ -195,20 +195,38 @@ export function TrailerProvider({ trailerKey, title, autoplay, children }: { tra
   );
 }
 
-/** The video layer, covering the hero like `object-fit: cover`. */
+/**
+ * The video layer, covering the hero like `object-fit: cover`. It stays up
+ * once playback has started (a paused frame is still a fine backdrop) and
+ * only goes away if the player fails.
+ */
 export function TrailerBackdrop() {
   const ctx = useContext(TrailerContext);
   if (!ctx) return null;
-  const { setHost, ready, playing } = ctx;
+  const { setHost, ready } = ctx;
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden [container-type:size]" aria-hidden>
       <div
         ref={setHost}
         className={cn(
-          'absolute top-1/2 left-1/2 h-[max(100cqh,56.25cqw)] w-[max(100cqw,177.78cqh)] -translate-x-1/2 -translate-y-1/2 scale-[1.18] transition-opacity duration-[1400ms] ease-smooth [&>iframe]:size-full',
-          ready && playing ? 'opacity-70' : 'opacity-0',
+          'absolute top-1/2 left-1/2 h-[max(100cqh,56.25cqw)] w-[max(100cqw,177.78cqh)] -translate-x-1/2 -translate-y-1/2 scale-[1.18] transition-opacity duration-[1200ms] ease-smooth [&>iframe]:size-full',
+          ready ? 'opacity-75' : 'opacity-0',
         )}
       />
+    </div>
+  );
+}
+
+/**
+ * The cover image, layered above the video. When the trailer starts it
+ * dissolves (fade, a slight drift and blur) until it is fully gone, while the
+ * video fades in underneath; if the player fails it comes back.
+ */
+export function TrailerCover({ children }: { children: ReactNode }) {
+  const ready = useContext(TrailerContext)?.ready ?? false;
+  return (
+    <div className={cn('absolute inset-0 transition-[opacity,scale,filter] duration-[1800ms] ease-smooth', ready ? 'pointer-events-none scale-[1.04] opacity-0 blur-md' : 'opacity-100')} aria-hidden={ready || undefined}>
+      {children}
     </div>
   );
 }

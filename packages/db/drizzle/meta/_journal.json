@@ -15,6 +15,13 @@
       "when": 1792415009828,
       "tag": "0001_cache_and_people",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792422078201,
+      "tag": "0002_import_jobs",
+      "breakpoints": true
     }
   ]
 }

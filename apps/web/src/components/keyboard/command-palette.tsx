@@ -272,6 +272,7 @@ function Palette({ open, onClose, pageCommands, signedIn, staff, username, prefe
             { id: 's-privacy', title: 'Settings: Privacy & preferences', group: 'Settings', icon: <Eye />, keywords: 'theme defaults device service spoilers', perform: () => go('/settings/privacy') },
             { id: 's-keyboard', title: 'Settings: Keyboard shortcuts', group: 'Settings', icon: <Keyboard />, keywords: 'keybindings hotkeys', perform: () => go('/settings/keyboard') },
             { id: 's-data', title: 'Settings: Your data', group: 'Settings', icon: <Database />, keywords: 'export download delete account gdpr', perform: () => go('/settings/data') },
+            { id: 's-import', title: 'Import from TV Time or AniList', group: 'Settings', icon: <Database />, keywords: 'import tvtime tv time anilist migrate history zip', perform: () => go('/settings/data') },
             ...(apiTokens ? [{ id: 's-tokens', title: 'Settings: API tokens', group: 'Settings', icon: <Keyboard />, perform: () => go('/settings/tokens') }] : []),
             {
               id: 'p-trailers',

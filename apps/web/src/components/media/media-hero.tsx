@@ -5,7 +5,7 @@ import { ExternalLink, Star } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Backdrop, Poster } from '@/components/media/poster';
 import { formatRuntime, yearOf } from '@/lib/format';
-import { TrailerBackdrop, TrailerButtons, TrailerProvider } from './hero-trailer';
+import { TrailerBackdrop, TrailerButtons, TrailerCover, TrailerProvider } from './hero-trailer';
 import { TypeBadge } from './type-badge';
 
 export function MediaHero({ media, anime, actions, meta, autoplayTrailer = true }: { media: Media; anime: AnimeDetails | null; actions: ReactNode; meta?: ReactNode; autoplayTrailer?: boolean }) {
@@ -13,8 +13,9 @@ export function MediaHero({ media, anime, actions, meta, autoplayTrailer = true 
   const hero = (
     <section className="relative -mx-4 -mt-6 overflow-hidden sm:-mx-6 sm:rounded-b-island">
       <div className="absolute inset-0">
-        {backdrop ? <img src={backdrop} alt="" className="size-full object-cover opacity-60" loading="eager" decoding="async" /> : <Backdrop path={null} className="size-full" />}
         {media.trailerKey ? <TrailerBackdrop /> : null}
+        {/* Above the trailer: fades out completely once the trailer is playing. */}
+        <TrailerCover>{backdrop ? <img src={backdrop} alt="" className="size-full object-cover opacity-60" loading="eager" decoding="async" /> : <Backdrop path={null} className="size-full" />}</TrailerCover>
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/85 to-bg/30" />
         <div className="absolute inset-0 bg-gradient-to-r from-bg/70 to-transparent" />
       </div>

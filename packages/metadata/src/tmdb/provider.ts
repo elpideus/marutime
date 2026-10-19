@@ -16,6 +16,8 @@ import type {
   SeasonSelection,
   ShowDetails,
   TrendingWindow,
+  ExternalMatches,
+  ExternalSource,
 } from '../types';
 import { classifyAnime, emptyPage, slugify } from '../util';
 import { TmdbClient, type TmdbAuth } from './client';
@@ -473,6 +475,16 @@ export class TmdbProvider implements MetadataProvider {
       params['vote_count.gte'] = undefined;
     }
     return mapPaged(await this.client.get<RawPaged<RawSummary>>(isMovie ? '/discover/movie' : '/discover/tv', params), isMovie ? 'movie' : 'show');
+  }
+
+  async findByExternalId(source: ExternalSource, id: string | number): Promise<ExternalMatches> {
+    type RawFind = { movie_results?: { id: number }[]; tv_results?: { id: number }[]; tv_episode_results?: { show_id: number; season_number: number; episode_number: number }[] };
+    const raw = await this.client.get<RawFind | null>(`/find/${encodeURIComponent(String(id))}`, { external_source: source === 'tvdb' ? 'tvdb_id' : 'imdb_id' });
+    return {
+      shows: (raw?.tv_results ?? []).map((r) => r.id),
+      movies: (raw?.movie_results ?? []).map((r) => r.id),
+      episodes: (raw?.tv_episode_results ?? []).map((r) => ({ showId: r.show_id, seasonNumber: r.season_number, episodeNumber: r.episode_number })),
+    };
   }
 
   async getShow(externalId: number, options: { seasons?: SeasonSelection } = {}): Promise<ShowDetails | null> {

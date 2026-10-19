@@ -249,6 +249,37 @@ function titleScore(candidate: AnimeEnrichment, titles: string[]): number {
   return best;
 }
 
+export type AniListListStatus = 'CURRENT' | 'PLANNING' | 'COMPLETED' | 'DROPPED' | 'PAUSED' | 'REPEATING';
+
+/** One title on a user's anime list. Dates are ISO (yyyy-mm-dd), times are epoch seconds. */
+export type AniListListEntry = {
+  status: AniListListStatus;
+  progress: number;
+  repeat: number;
+  /** 0–10, 0 when unscored. */
+  score: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  updatedAt: number | null;
+  createdAt: number | null;
+  media: {
+    id: number;
+    idMal: number | null;
+    format: string | null;
+    episodes: number | null;
+    titleRomaji: string | null;
+    titleEnglish: string | null;
+    titleNative: string | null;
+    startDate: string | null;
+  };
+};
+
+type RawDate = { year: number | null; month: number | null; day: number | null } | null;
+function isoDate(d: RawDate): string | null {
+  if (!d?.year) return null;
+  return `${d.year}-${String(d.month ?? 1).padStart(2, '0')}-${String(d.day ?? 1).padStart(2, '0')}`;
+}
+
 export class AniListClient {
   constructor(private readonly options: { userAgent?: string } = {}) {}
 
@@ -271,7 +302,13 @@ export class AniListClient {
         attempt += 1;
         continue;
       }
-      if (!res.ok) throw new MetadataError(`AniList request failed (${res.status})`, res.status);
+      if (!res.ok) {
+        const detail = await res
+          .json()
+          .then((b: { errors?: Array<{ message: string }> }) => b.errors?.[0]?.message)
+          .catch(() => undefined);
+        throw new MetadataError(detail ? `AniList: ${detail}` : `AniList request failed (${res.status})`, res.status);
+      }
       const body = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
       if (body.errors?.length) throw new MetadataError(`AniList error: ${body.errors[0]!.message}`);
       return body.data as T;
@@ -284,6 +321,69 @@ export class AniListClient {
       { search, perPage },
     );
     return data.Page.media.map(mapMedia);
+  }
+
+  /** A user's public anime list, or null when there is no such user. Throws a MetadataError mentioning "private" for private lists. */
+  async getUserAnimeList(userName: string): Promise<{ user: { id: number; name: string }; entries: AniListListEntry[] } | null> {
+    type RawEntry = {
+      status: AniListListStatus;
+      progress: number | null;
+      repeat: number | null;
+      score: number | null;
+      startedAt: RawDate;
+      completedAt: RawDate;
+      updatedAt: number | null;
+      createdAt: number | null;
+      media: { id: number; idMal: number | null; format: string | null; episodes: number | null; title: { romaji: string | null; english: string | null; native: string | null }; startDate: RawDate };
+    };
+    type Raw = { MediaListCollection: { user: { id: number; name: string } | null; lists: Array<{ isCustomList: boolean; entries: RawEntry[] }> } | null };
+    let data: Raw;
+    try {
+      data = await this.query<Raw>(
+        `query ($name: String) { MediaListCollection(userName: $name, type: ANIME) { user { id name } lists { isCustomList entries { status progress repeat score(format: POINT_10_DECIMAL) startedAt { year month day } completedAt { year month day } updatedAt createdAt media { id idMal format episodes title { romaji english native } startDate { year month day } } } } } }`,
+        { name: userName },
+      );
+    } catch (err) {
+      // Private lists are reported as such; anything else that is a 404 means there is no such user.
+      if (err instanceof MetadataError && /private/i.test(err.message)) throw err;
+      if (err instanceof MetadataError && (err.status === 404 || /not found/i.test(err.message))) return null;
+      throw err;
+    }
+    const col = data.MediaListCollection;
+    if (!col?.user) return null;
+    // Custom lists repeat entries from the status lists, so take each title once.
+    const seen = new Map<number, AniListListEntry>();
+    for (const list of [...col.lists].sort((a, b) => Number(a.isCustomList) - Number(b.isCustomList))) {
+      for (const e of list.entries) {
+        if (seen.has(e.media.id)) continue;
+        seen.set(e.media.id, {
+          status: e.status,
+          progress: e.progress ?? 0,
+          repeat: e.repeat ?? 0,
+          score: e.score ?? 0,
+          startedAt: isoDate(e.startedAt),
+          completedAt: isoDate(e.completedAt),
+          updatedAt: e.updatedAt || null,
+          createdAt: e.createdAt || null,
+          media: { id: e.media.id, idMal: e.media.idMal, format: e.media.format, episodes: e.media.episodes, titleRomaji: e.media.title.romaji, titleEnglish: e.media.title.english, titleNative: e.media.title.native, startDate: isoDate(e.media.startDate) },
+        });
+      }
+    }
+    return { user: col.user, entries: [...seen.values()] };
+  }
+
+  /** Episode counts and start dates for many titles (50 per request). */
+  async getEpisodeCounts(ids: number[]): Promise<Map<number, { episodes: number | null; startDate: string | null }>> {
+    const out = new Map<number, { episodes: number | null; startDate: string | null }>();
+    const unique = [...new Set(ids)];
+    for (let i = 0; i < unique.length; i += 50) {
+      const data = await this.query<{ Page: { media: Array<{ id: number; episodes: number | null; startDate: RawDate }> } }>(
+        `query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) { id episodes startDate { year month day } } } }`,
+        { ids: unique.slice(i, i + 50) },
+      );
+      for (const m of data.Page.media) out.set(m.id, { episodes: m.episodes, startDate: isoDate(m.startDate) });
+    }
+    return out;
   }
 
   async getById(id: number): Promise<AnimeEnrichment | null> {

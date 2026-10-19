@@ -42,6 +42,13 @@ MaruTime is a pnpm monorepo. The web app is thin; nearly all behaviour lives in 
 - **Optimistic UI**: watch state lives in a small client store (`components/tracking/watch-store.ts`) shared by every control. Changes apply instantly, are saved in the background in per-item order, and only failures interrupt with a toast; unwatch and bulk marks offer Undo (the server returns the removed rows so they can be restored).
 - **Settings**: key/value `platform_settings` overlaying defaults in `config`; editable in the admin dashboard; 30 s in-process cache.
 
+## Imports
+
+- `@marutime/core/import-format` (browser-safe) defines the normalised import shape (shows with episode viewings or AniList-style progress, movies, lists) and the TV Time parser. The TV Time zip is unpacked with `fflate` and parsed in the browser, so only the relevant history (a few hundred KB) reaches the server, where it is validated again.
+- `@marutime/core` `imports/` stores each import as an `import_jobs` row and works through it in steps (`runImportStep`, ~25 s each, saved after every batch, guarded by a lease). The settings page drives the steps while it is open; closing it only pauses the job.
+- Matching: TheTVDB ids (TV Time) go through TMDB `/find`; seasons whose numbering doesn't line up with TMDB, and specials, are matched per episode through their TheTVDB episode ids. AniList ids map to TMDB shows, seasons and episode offsets through the Fribb/anime-lists dataset (split cours get offsets from AniList episode counts); anything unmapped falls back to a title search. Movies without ids match on title and year.
+- Viewings are only added where missing (per episode, counting rewatches), so re-running an import is a no-op. Imports don't post to the friends feed. Anime that arrive in bulk skip AniList enrichment after a small per-step budget; the daily cron fills it in.
+
 ## Web app
 
 - `src/app/(app)`: shell with sidebar, top bar and mobile tab bar; all product pages.

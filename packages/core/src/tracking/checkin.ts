@@ -97,7 +97,7 @@ async function ensureTracking(db: DbExecutor, userId: string, mediaId: number, w
 }
 
 /** Did the user now finish every aired episode of an ended show? */
-async function checkShowFinished(db: DbExecutor, userId: string, mediaRow: Media): Promise<boolean> {
+export async function checkShowFinished(db: DbExecutor, userId: string, mediaRow: Media): Promise<boolean> {
   if (mediaRow.status !== 'Ended' && mediaRow.status !== 'Canceled') return false;
   const remaining = await db
     .select({ n: count() })

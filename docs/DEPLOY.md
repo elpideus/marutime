@@ -42,6 +42,8 @@ Then sign in at `/login`, change your password in *Settings → Account*, and fi
 
 After that, Vercel keeps the schema current by itself: a **production** build runs `pnpm --filter @marutime/db migrate:deploy` before `next build`, which applies any pending migrations. If a migration fails, the build fails and the previous deployment stays live. Preview builds share the production database, so they never migrate. Keep migrations additive (new tables, nullable or defaulted columns) so an instant rollback to the previous deployment still works against the newer schema.
 
+> Migration `0002_import_jobs` adds the `import_jobs` table for TV Time and AniList imports; production builds on Vercel apply it automatically.
+
 > Upgrading an existing install: migration `0001_cache_and_people` adds the `cache_entries` table (the shared cache), voice-actor columns on `characters`, and re-flags existing Chinese/Korean animation (donghua such as *Link Click*) as anime. On Vercel the production build applies it; elsewhere run `pnpm db:migrate` before starting this release, because title pages read the new `characters` columns.
 
 ### Free-tier notes

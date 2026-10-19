@@ -14,6 +14,7 @@
 - **Anime done right**: TMDB data enriched with AniList (character art, studios, scores, tags).
 - **Admin dashboard**: metrics, users, roles, suspensions, reports, catalogue of devices/services, platform settings (including the donation call to action), backups, audit log.
 - **Automatic encrypted backups**, **GDPR exports** (JSON/CSV) and **one-click account deletion**.
+- **Imports**: bring your history from **TV Time** (the GDPR export zip, read in the browser) or **AniList** (public list by username). Shows, every episode and movie with its date, rewatches, watchlist, favourites and lists; resumable, and safe to run twice.
 - **Keyboard first**: a Ctrl/⌘ K command bar (go anywhere, change settings, search, mark things watched), `g h`-style shortcuts, j/k item navigation, all remappable in *Settings → Keyboard*.
 - **Cast and characters**: actor, character and voice-actor pages (TMDB people, AniList characters and staff) in a stacked modal.
 - **Smart caching**: upstream lists, people and AniList data are cached in memory and Postgres with stale-while-revalidate; titles refresh in the background and only re-fetch seasons that can still change.

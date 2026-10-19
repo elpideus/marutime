@@ -1,8 +1,10 @@
 import { and, asc, count, desc, devices, eq, ilike, media, or, services, sql, watches, type DbExecutor, type Device, type Media, type Service, type User } from '@marutime/db';
+import { AniListClient } from '@marutime/metadata';
 import { z } from 'zod';
+import { cached, TTL } from '../cache';
 import { errors } from '../errors';
 import { invalidateCatalogCache } from '../tracking/devices';
-import { ensureMedia } from '../media/sync';
+import { enrichAnime, ensureMedia } from '../media/sync';
 import { parseInput } from '../utils';
 import { logAudit } from './audit';
 
@@ -132,3 +134,32 @@ export async function refreshStaleMedia(db: DbExecutor, limit = 25): Promise<{ r
   }
   return { refreshed, failed };
 }
+
+/**
+ * Anime that arrived without AniList details (bulk imports skip the lookup to
+ * stay inside AniList's rate limit) get them filled in a few at a time.
+ * Titles people track come first; each title is tried at most monthly.
+ */
+export async function backfillAnimeEnrichment(db: DbExecutor, opts: { limit?: number; budgetMs?: number } = {}): Promise<{ enriched: number; tried: number }> {
+  const limit = opts.limit ?? 20;
+  const started = Date.now();
+  const candidates = await db
+    .select()
+    .from(media)
+    .where(and(eq(media.isAnime, true), sql`not exists(select 1 from anime_details ad where ad.media_id = media.id)`))
+    .orderBy(sql`exists(select 1 from show_tracking st where st.media_id = media.id) or exists(select 1 from watchlist w where w.media_id = media.id) desc`, desc(media.popularity))
+    .limit(limit * 5);
+  const client = new AniListClient();
+  let tried = 0;
+  let enriched = 0;
+  for (const row of candidates) {
+    if (tried >= limit || Date.now() - started > (opts.budgetMs ?? 20_000)) break;
+    await cached(`al:enrich-attempt:${row.id}`, { ttl: 30 * TTL.day, persist: true }, async () => {
+      tried++;
+      if (await enrichAnime(db, row, client).catch(() => null)) enriched++;
+      return Date.now();
+    });
+  }
+  return { enriched, tried };
+}
+
