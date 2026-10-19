@@ -15,9 +15,10 @@ next-env.d.ts
 !.env.example
 
 # local data
-data/
-uploads/
-backups/
+/data/
+/uploads/
+/backups/
+apps/*/data/
 *.log
 
 # os / editor
