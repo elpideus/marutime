@@ -14,7 +14,10 @@
 - **Anime done right**: TMDB data enriched with AniList (character art, studios, scores, tags).
 - **Admin dashboard**: metrics, users, roles, suspensions, reports, catalogue of devices/services, platform settings (including the donation call to action), backups, audit log.
 - **Automatic encrypted backups**, **GDPR exports** (JSON/CSV) and **one-click account deletion**.
-- **Open API** (`/api/v1`, OpenAPI at `/api/v1/openapi.json`) with personal access tokens for mobile apps and player plugins (scrobbling).
+- **Keyboard first**: a Ctrl/⌘ K command bar (go anywhere, change settings, search, mark things watched), `g h`-style shortcuts, j/k item navigation, all remappable in *Settings → Keyboard*.
+- **Cast and characters**: actor, character and voice-actor pages (TMDB people, AniList characters and staff) in a stacked modal.
+- **Smart caching**: upstream lists, people and AniList data are cached in memory and Postgres with stale-while-revalidate; titles refresh in the background and only re-fetch seasons that can still change.
+- **API** (`/api/v1`, OpenAPI at `/api/v1/openapi.json`) with personal access tokens for mobile apps and player plugins (scrobbling). Off by default: an admin switches it on in *Admin → Settings → API*; until then only admins can use it.
 
 Runs on **Vercel's free tier** (Neon Postgres + Cloudflare R2) or anywhere with **Docker**.
 

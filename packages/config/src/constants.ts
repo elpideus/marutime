@@ -168,6 +168,8 @@ export const DEFAULT_PLATFORM_SETTINGS = {
   'legal.controllerEmail': '',
   'legal.controllerAddress': '',
   'legal.country': '',
+  /** The /api/v1 API and personal access tokens. Off until the API is ready to be public; admins can always use it. */
+  'api.public': false,
   'backup.enabled': true,
   'backup.retentionDays': 30,
   'moderation.autoHideReports': 5,

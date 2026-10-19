@@ -1,25 +1,39 @@
 import 'server-only';
 
 import { hasScope, validateApiToken, type ApiScope } from '@marutime/auth';
-import { AppError, isAppError } from '@marutime/core';
+import { AppError, isApiAvailable, isAppError } from '@marutime/core';
 import { getDb, type ApiToken, type User } from '@marutime/db';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/session';
 
 export type ApiContext = { user: User; token: ApiToken | null };
 
+/** 404 for everyone but admins while the public API is switched off. */
+async function assertAvailable(user: User | null): Promise<void> {
+  if (!(await isApiAvailable(getDb(), user))) throw new AppError('not_found', 'Not found');
+}
+
 /** Accepts a personal API token (Bearer mtk_…) or the web session cookie. */
 export async function authenticateApi(request: Request, scope?: ApiScope): Promise<ApiContext> {
   const auth = request.headers.get('authorization');
   if (auth?.startsWith('Bearer ')) {
     const result = await validateApiToken(getDb(), auth.slice(7).trim());
+    await assertAvailable(result?.user ?? null);
     if (!result) throw new AppError('unauthorized', 'Invalid or revoked API token');
     if (scope && !hasScope(result.token, scope)) throw new AppError('forbidden', `This token lacks the "${scope}" scope`);
     return { user: result.user, token: result.token };
   }
   const user = await getCurrentUser();
+  await assertAvailable(user);
   if (!user) throw new AppError('unauthorized', 'Provide a Bearer API token or sign in');
   return { user, token: null };
+}
+
+/** Guard for API endpoints that need no sign-in (catalogs, the OpenAPI description). */
+export async function assertPublicApi(request: Request): Promise<void> {
+  const auth = request.headers.get('authorization');
+  const user = auth?.startsWith('Bearer ') ? ((await validateApiToken(getDb(), auth.slice(7).trim()))?.user ?? null) : await getCurrentUser();
+  await assertAvailable(user);
 }
 
 export function apiJson(data: unknown, init: ResponseInit = {}): NextResponse {

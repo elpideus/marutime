@@ -3,13 +3,14 @@
 import type { ListCard as ListCardData } from '@marutime/core';
 import { listHref } from '@marutime/core/hrefs';
 import { img } from '@marutime/metadata/images';
-import { Avatar, Badge, Island, cn, springs } from '@marutime/ui';
-import { Heart, Lock, Link2, Users } from 'lucide-react';
+import { Avatar, Badge, Island, cn, springs, useToast } from '@marutime/ui';
+import { Lock, Link2, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toggleListLikeAction } from '@/actions/lists';
+import { LikeHeart } from '@/components/like-heart';
 
 const VIS_ICON = { private: <Lock className="size-3" />, unlisted: <Link2 className="size-3" />, followers: <Users className="size-3" /> } as const;
 
@@ -18,12 +19,14 @@ export function ListCard({ card, signedIn, className }: { card: ListCardData; si
   const [count, setCount] = useState(card.list.likeCount);
   const [, start] = useTransition();
   const router = useRouter();
+  const { toast } = useToast();
   const href = listHref(card.owner, card.list);
   const like = () => {
     if (!signedIn) {
       router.push('/login');
       return;
     }
+    const prev = { liked, count };
     setLiked(!liked);
     setCount((c) => c + (liked ? -1 : 1));
     start(async () => {
@@ -31,13 +34,17 @@ export function ListCard({ card, signedIn, className }: { card: ListCardData; si
       if (r.ok) {
         setLiked(r.data.liked);
         setCount(r.data.likeCount);
+      } else {
+        setLiked(prev.liked);
+        setCount(prev.count);
+        toast({ tone: 'error', title: r.error });
       }
     });
   };
   const posters = card.previewPosters;
   return (
     <Island padding="none" interactive className={cn('overflow-hidden', className)}>
-      <Link href={href} className="block">
+      <Link href={href} data-nav-item className="block rounded-card outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
         <div className="relative aspect-[16/9] w-full overflow-hidden bg-surface-3">
           {card.list.coverUrl ? (
             <img src={card.list.coverUrl} alt="" className="size-full object-cover" loading="lazy" />
@@ -67,7 +74,7 @@ export function ListCard({ card, signedIn, className }: { card: ListCardData; si
         {card.list.visibility !== 'public' ? <span className="flex items-center gap-1 text-[11px] text-fg-subtle capitalize">{VIS_ICON[card.list.visibility]} {card.list.visibility}</span> : null}
         <Badge tone="outline" className="capitalize">{card.list.category}</Badge>
         <motion.button type="button" whileTap={{ scale: 0.85 }} transition={springs.pop} onClick={like} aria-pressed={liked} className={cn('flex items-center gap-1 rounded-pill px-2 py-1 text-xs text-fg-muted hover:bg-surface-2', liked && 'text-danger')}>
-          <Heart className={cn('size-3.5', liked && 'fill-current')} /> {count}
+          <LikeHeart liked={liked} count={count} />
         </motion.button>
       </div>
     </Island>

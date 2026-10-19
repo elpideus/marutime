@@ -1,8 +1,16 @@
 import { APP_NAME, getEnv } from '@marutime/config';
 import { NextResponse } from 'next/server';
+import { apiError, assertPublicApi } from '@/lib/api-auth';
+
+export const dynamic = 'force-dynamic';
 
 /** Minimal OpenAPI description so mobile apps and plugins can generate clients. */
-export function GET() {
+export async function GET(request: Request) {
+  try {
+    await assertPublicApi(request);
+  } catch (err) {
+    return apiError(err);
+  }
   const base = `${getEnv().APP_URL}/api/v1`;
   const bearer = [{ bearerAuth: [] }];
   const spec = {
@@ -29,5 +37,5 @@ export function GET() {
       '/services': { get: { summary: 'Service catalog' } },
     },
   };
-  return NextResponse.json(spec, { headers: { 'Cache-Control': 'public, s-maxage=3600' } });
+  return NextResponse.json(spec, { headers: { 'Cache-Control': 'private, no-store' } });
 }

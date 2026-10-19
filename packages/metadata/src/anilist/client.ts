@@ -9,6 +9,54 @@ export type AnimeCharacter = {
   imageUrl: string | null;
   role: 'MAIN' | 'SUPPORTING' | 'BACKGROUND';
   voiceActor: string | null;
+  voiceActorId: number | null;
+  voiceActorImageUrl: string | null;
+};
+
+export type AniListMediaRef = {
+  anilistId: number;
+  title: string;
+  coverImageUrl: string | null;
+  format: string | null;
+  year: number | null;
+  type: 'ANIME' | 'MANGA';
+};
+
+export type AniListVoiceActor = { anilistId: number; name: string; nativeName: string | null; imageUrl: string | null; language: string | null };
+
+export type AniListCharacterDetails = {
+  anilistId: number;
+  name: string;
+  nativeName: string | null;
+  alternativeNames: string[];
+  imageUrl: string | null;
+  description: string | null;
+  gender: string | null;
+  age: string | null;
+  dateOfBirth: string | null;
+  bloodType: string | null;
+  favourites: number | null;
+  siteUrl: string | null;
+  appearances: Array<AniListMediaRef & { role: string | null; voiceActors: AniListVoiceActor[] }>;
+};
+
+export type AniListStaffDetails = {
+  anilistId: number;
+  name: string;
+  nativeName: string | null;
+  imageUrl: string | null;
+  description: string | null;
+  occupations: string[];
+  gender: string | null;
+  age: number | null;
+  dateOfBirth: string | null;
+  dateOfDeath: string | null;
+  homeTown: string | null;
+  yearsActive: number[];
+  language: string | null;
+  favourites: number | null;
+  siteUrl: string | null;
+  roles: Array<{ character: { anilistId: number; name: string; imageUrl: string | null }; media: AniListMediaRef; role: string | null }>;
 };
 
 export type AnimeEnrichment = {
@@ -68,7 +116,7 @@ type RawMedia = {
     edges: Array<{
       role: 'MAIN' | 'SUPPORTING' | 'BACKGROUND';
       node: { id: number; name: { full: string | null; native: string | null }; image: { large: string | null } | null };
-      voiceActors: Array<{ name: { full: string | null } }>;
+      voiceActors: Array<{ id: number; name: { full: string | null }; image: { large: string | null } | null }>;
     }>;
   } | null;
 };
@@ -85,7 +133,7 @@ const MEDIA_FIELDS = `
   tags { name rank isMediaSpoiler }
   nextAiringEpisode { airingAt episode }
   characters(sort: [ROLE, RELEVANCE], perPage: 30) {
-    edges { role node { id name { full native } image { large } } voiceActors(language: JAPANESE) { name { full } } }
+    edges { role node { id name { full native } image { large } } voiceActors(language: JAPANESE) { id name { full } image { large } } }
   }
 `;
 
@@ -135,8 +183,47 @@ function mapMedia(raw: RawMedia): AnimeEnrichment {
         imageUrl: e.node.image?.large ?? null,
         role: e.role,
         voiceActor: e.voiceActors?.[0]?.name.full ?? null,
+        voiceActorId: e.voiceActors?.[0]?.id ?? null,
+        voiceActorImageUrl: e.voiceActors?.[0]?.image?.large ?? null,
       })),
   };
+}
+
+type RawMediaRef = { id: number; type: 'ANIME' | 'MANGA'; format: string | null; title: { userPreferred: string | null; english: string | null; romaji: string | null }; coverImage: { large: string | null } | null; startDate: { year: number | null } | null };
+type RawFuzzyDate = { year: number | null; month: number | null; day: number | null } | null;
+
+const MEDIA_REF_FIELDS = 'id type format title { userPreferred english romaji } coverImage { large } startDate { year }';
+
+function mapMediaRef(m: RawMediaRef): AniListMediaRef {
+  return {
+    anilistId: m.id,
+    title: m.title.english ?? m.title.userPreferred ?? m.title.romaji ?? 'Untitled',
+    coverImageUrl: m.coverImage?.large ?? null,
+    format: m.format,
+    year: m.startDate?.year ?? null,
+    type: m.type,
+  };
+}
+
+function fuzzyDate(d: RawFuzzyDate, withYear = true): string | null {
+  if (!d || (!d.month && !d.year)) return null;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const parts = [d.day ? String(d.day) : null, d.month ? months[d.month - 1] : null, withYear && d.year ? String(d.year) : null].filter(Boolean);
+  return parts.join(' ') || null;
+}
+
+/** AniList markdown: drop spoiler blocks (~!...!~), links and emphasis. */
+function cleanBio(input: string | null): string | null {
+  if (!input) return null;
+  const text = input
+    .replace(/~!([\s\S]*?)!~/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text || null;
 }
 
 function normalizeTitle(t: string | null | undefined): string {
@@ -207,6 +294,106 @@ export class AniListClient {
   async getByMalId(idMal: number): Promise<AnimeEnrichment | null> {
     const data = await this.query<{ Media: RawMedia | null }>(`query ($idMal: Int) { Media(idMal: $idMal, type: ANIME) { ${MEDIA_FIELDS} } }`, { idMal });
     return data.Media ? mapMedia(data.Media) : null;
+  }
+
+  async getCharacter(id: number): Promise<AniListCharacterDetails | null> {
+    type Raw = {
+      id: number;
+      name: { full: string | null; native: string | null; alternative: string[] | null };
+      image: { large: string | null } | null;
+      description: string | null;
+      gender: string | null;
+      age: string | null;
+      bloodType: string | null;
+      dateOfBirth: RawFuzzyDate;
+      favourites: number | null;
+      siteUrl: string | null;
+      media: { edges: Array<{ characterRole: string | null; node: RawMediaRef; voiceActors: Array<{ id: number; name: { full: string | null; native: string | null }; image: { large: string | null } | null; languageV2: string | null }> }> } | null;
+    };
+    const data = await this.query<{ Character: Raw | null }>(
+      `query ($id: Int) { Character(id: $id) {
+        id name { full native alternative } image { large } description(asHtml: false) gender age bloodType dateOfBirth { year month day } favourites siteUrl
+        media(sort: [POPULARITY_DESC], perPage: 25) { edges { characterRole node { ${MEDIA_REF_FIELDS} } voiceActors { id name { full native } image { large } languageV2 } } }
+      } }`,
+      { id },
+    );
+    const c = data.Character;
+    if (!c || !c.name.full) return null;
+    return {
+      anilistId: c.id,
+      name: c.name.full,
+      nativeName: c.name.native,
+      alternativeNames: (c.name.alternative ?? []).filter(Boolean).slice(0, 6),
+      imageUrl: c.image?.large ?? null,
+      description: cleanBio(c.description),
+      gender: c.gender,
+      age: c.age,
+      dateOfBirth: fuzzyDate(c.dateOfBirth, false),
+      bloodType: c.bloodType,
+      favourites: c.favourites,
+      siteUrl: c.siteUrl,
+      appearances: (c.media?.edges ?? []).map((e) => ({
+        ...mapMediaRef(e.node),
+        role: e.characterRole,
+        voiceActors: (e.voiceActors ?? [])
+          .filter((v) => v.name.full)
+          .map((v) => ({ anilistId: v.id, name: v.name.full!, nativeName: v.name.native, imageUrl: v.image?.large ?? null, language: v.languageV2 })),
+      })),
+    };
+  }
+
+  async getStaff(id: number): Promise<AniListStaffDetails | null> {
+    type Raw = {
+      id: number;
+      name: { full: string | null; native: string | null };
+      image: { large: string | null } | null;
+      description: string | null;
+      primaryOccupations: string[] | null;
+      gender: string | null;
+      age: number | null;
+      dateOfBirth: RawFuzzyDate;
+      dateOfDeath: RawFuzzyDate;
+      homeTown: string | null;
+      yearsActive: number[] | null;
+      languageV2: string | null;
+      favourites: number | null;
+      siteUrl: string | null;
+      characterMedia: { edges: Array<{ characterRole: string | null; node: RawMediaRef; characters: Array<{ id: number; name: { full: string | null }; image: { large: string | null } | null } | null> }> } | null;
+    };
+    const data = await this.query<{ Staff: Raw | null }>(
+      `query ($id: Int) { Staff(id: $id) {
+        id name { full native } image { large } description(asHtml: false) primaryOccupations gender age dateOfBirth { year month day } dateOfDeath { year month day } homeTown yearsActive languageV2 favourites siteUrl
+        characterMedia(sort: [POPULARITY_DESC], perPage: 40) { edges { characterRole node { ${MEDIA_REF_FIELDS} } characters { id name { full } image { large } } } }
+      } }`,
+      { id },
+    );
+    const s = data.Staff;
+    if (!s || !s.name.full) return null;
+    const roles: AniListStaffDetails['roles'] = [];
+    for (const e of s.characterMedia?.edges ?? []) {
+      for (const ch of e.characters ?? []) {
+        if (!ch?.name.full) continue;
+        roles.push({ character: { anilistId: ch.id, name: ch.name.full, imageUrl: ch.image?.large ?? null }, media: mapMediaRef(e.node), role: e.characterRole });
+      }
+    }
+    return {
+      anilistId: s.id,
+      name: s.name.full,
+      nativeName: s.name.native,
+      imageUrl: s.image?.large ?? null,
+      description: cleanBio(s.description),
+      occupations: s.primaryOccupations ?? [],
+      gender: s.gender,
+      age: s.age,
+      dateOfBirth: fuzzyDate(s.dateOfBirth),
+      dateOfDeath: fuzzyDate(s.dateOfDeath),
+      homeTown: s.homeTown,
+      yearsActive: s.yearsActive ?? [],
+      language: s.languageV2,
+      favourites: s.favourites,
+      siteUrl: s.siteUrl,
+      roles,
+    };
   }
 
   /**

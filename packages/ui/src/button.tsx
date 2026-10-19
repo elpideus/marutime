@@ -5,12 +5,13 @@ import { motion, type HTMLMotionProps } from 'motion/react';
 import { forwardRef, type ReactNode } from 'react';
 import { cn } from './cn';
 import { springs, tap } from './motion';
+import { Tooltip } from './tooltip';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'danger' | 'accent-soft';
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'icon' | 'icon-sm' | 'icon-lg';
 
 const base =
-  'relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-control font-medium tracking-[-0.01em] select-none outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:pointer-events-none disabled:opacity-50';
+  'relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-control font-medium tracking-[-0.01em] select-none outline-none transition-[background-color,border-color,color,box-shadow,opacity] duration-200 focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:pointer-events-none disabled:opacity-50';
 
 const variants: Record<ButtonVariant, string> = {
   primary: 'bg-accent text-on-accent shadow-[0_8px_24px_-10px_var(--mt-accent-glow)] hover:bg-accent-strong',
@@ -39,14 +40,17 @@ export type ButtonProps = Omit<HTMLMotionProps<'button'>, 'children'> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
   loading?: boolean;
+  /** Hover/focus hint explaining what the button does. */
+  tooltip?: ReactNode;
+  tooltipShortcut?: string[];
   children?: ReactNode;
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'primary', size = 'md', loading = false, className, children, disabled, type = 'button', ...rest },
+  { variant = 'primary', size = 'md', loading = false, className, children, disabled, type = 'button', tooltip, tooltipShortcut, ...rest },
   ref,
 ) {
-  return (
+  const button = (
     <motion.button
       ref={ref}
       type={type}
@@ -60,5 +64,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {loading ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : null}
       {children}
     </motion.button>
+  );
+  if (!tooltip) return button;
+  return (
+    <Tooltip content={tooltip} shortcut={tooltipShortcut}>
+      {button}
+    </Tooltip>
   );
 });

@@ -36,7 +36,7 @@ export function UserActions({ user, actorRole, actorId }: { user: AdminUserRow; 
       <Menu>
         <MenuTrigger>
           {(props) => (
-            <Button variant="ghost" size="icon-sm" {...props} aria-label="User actions">
+            <Button variant="ghost" size="icon-sm" {...props} aria-label="User actions" tooltip="Role, suspension, password, export, delete">
               <Ellipsis className="size-4" />
             </Button>
           )}

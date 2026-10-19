@@ -21,7 +21,7 @@ import {
 } from '@marutime/db';
 import { z } from 'zod';
 import { errors } from '../errors';
-import { recordActivity } from '../social/activity';
+import { recordActivity, removeActivities } from '../social/activity';
 import { createNotification } from '../social/notifications';
 import { parseInput } from '../utils';
 
@@ -234,6 +234,7 @@ export async function deleteComment(db: DbExecutor, actor: User, commentId: stri
   if (!row) throw errors.notFound('Comment');
   if (row.userId !== actor.id && !isModerator(actor)) throw errors.forbidden();
   await db.update(comments).set({ deletedAt: new Date(), body: '', images: [] }).where(eq(comments.id, commentId));
+  await removeActivities(db, { userId: row.userId, type: 'commented', commentId });
 }
 
 export async function setCommentHidden(db: DbExecutor, moderator: User, commentId: string, hidden: boolean, reason?: string): Promise<void> {

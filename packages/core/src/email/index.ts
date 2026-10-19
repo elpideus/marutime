@@ -45,7 +45,7 @@ export function emailEnabled(): boolean {
 }
 
 function layout(title: string, body: string, cta?: { label: string; url: string }): string {
-  return `<!doctype html><html><body style="margin:0;background:#09090b;color:#fafafa;font-family:-apple-system,Segoe UI,Inter,sans-serif;padding:32px">
+  return `<!doctype html><html><body style="margin:0;background:#171717;color:#fafafa;font-family:-apple-system,Segoe UI,Inter,sans-serif;padding:32px">
 <div style="max-width:520px;margin:0 auto;background:#141416;border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:32px">
 <div style="font-weight:700;font-size:20px;color:#ffd233;margin-bottom:16px">${APP_NAME}</div>
 <h1 style="font-size:22px;margin:0 0 12px">${title}</h1>

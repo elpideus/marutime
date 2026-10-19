@@ -1,7 +1,7 @@
-import { getActiveDevices, getActiveServices, getCharactersForMedia, getGlobalActivity, getHomeFeed, getRecentWatches, getUpcoming, getUserStats, getWatchNext, getWatchlist, trendingAll } from '@marutime/core';
+import { getFollowingIds, getGlobalActivity, getHomeFeed, getRecentWatches, getUpcoming, getUserStats, getWatchNext, getWatchlist, trendingAll } from '@marutime/core';
 import { getDb, type User } from '@marutime/db';
 import { Button, Island, IslandHeader } from '@marutime/ui';
-import { ArrowRight, Sparkles, Tv } from 'lucide-react';
+import { ArrowRight, Sparkles, Tv, Users } from 'lucide-react';
 import Link from 'next/link';
 import { ActivityItem } from '@/components/feed/activity-item';
 import { UpcomingIsland } from '@/components/home/upcoming';
@@ -11,6 +11,7 @@ import { MediaRow } from '@/components/media/media-row';
 import { PageHeader } from '@/components/page-header';
 import { formatWatchTime } from '@/lib/format';
 import { cardFromMedia, cardFromSummary } from '@/lib/media-card';
+import { renderedAt } from '@/lib/clock';
 import { getCurrentUser } from '@/lib/session';
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
@@ -28,19 +29,17 @@ async function LoggedOutHome() {
 
 async function Dashboard({ user, welcome }: { user: User; welcome: boolean }) {
   const db = getDb();
-  const [watchNext, upcoming, recent, watchlist, stats, feed, devices, services, trending] = await Promise.all([
+  const serverAt = renderedAt();
+  const [watchNext, upcoming, recent, watchlist, stats, feed, following, trending] = await Promise.all([
     getWatchNext(db, user.id, 12),
     getUpcoming(db, user.id, 8),
     getRecentWatches(db, user.id, 10),
     getWatchlist(db, user.id),
     getUserStats(db, user.id),
     getHomeFeed(db, user.id, { limit: 8 }),
-    getActiveDevices(db),
-    getActiveServices(db),
+    getFollowingIds(db, user.id),
     trendingAll().catch(() => []),
   ]);
-  const watchNextWithChars = await Promise.all(watchNext.map(async (w) => ({ ...w, characters: await getCharactersForMedia(db, w.media.id, { limit: 24 }) })));
-  const defaults = { deviceId: user.preferences.defaultDeviceId ?? null, serviceId: user.preferences.defaultServiceId ?? null };
   const hour = new Date().getHours();
   const greeting = hour < 5 ? 'Late night session' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const hasAnything = watchNext.length > 0 || recent.length > 0 || watchlist.length > 0;
@@ -67,8 +66,8 @@ async function Dashboard({ user, welcome }: { user: User; welcome: boolean }) {
             My shows
           </Link>
         </div>
-        {watchNextWithChars.length > 0 ? (
-          <WatchNextGrid items={watchNextWithChars} devices={devices} services={services} defaults={defaults} />
+        {watchNext.length > 0 ? (
+          <WatchNextGrid items={watchNext} serverAt={serverAt} />
         ) : (
           <Island className="flex flex-col items-center gap-3 py-10 text-center">
             <span className="flex size-12 items-center justify-center rounded-[16px] bg-accent-soft text-accent">
@@ -78,8 +77,8 @@ async function Dashboard({ user, welcome }: { user: User; welcome: boolean }) {
               <p className="font-semibold text-fg">You are all caught up</p>
               <p className="mt-1 text-sm text-fg-muted">Follow a show and its next unwatched episode will show up here.</p>
             </div>
-            <Link href="/discover">
-              <Button size="sm" tabIndex={-1}>
+            <Link href="/discover" className="rounded-control outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
+              <Button size="sm" tabIndex={-1} className="cta-arrow">
                 Find something to watch <ArrowRight className="size-4" />
               </Button>
             </Link>
@@ -87,25 +86,39 @@ async function Dashboard({ user, welcome }: { user: User; welcome: boolean }) {
         )}
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <UpcomingIsland items={upcoming} />
+      {upcoming.length > 0 || feed.items.length > 0 || following.length === 0 ? (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {upcoming.length > 0 ? (
+            <div className={feed.items.length > 0 || following.length === 0 ? 'lg:col-span-2' : 'lg:col-span-3'}>
+              <UpcomingIsland items={upcoming} />
+            </div>
+          ) : null}
+          {feed.items.length > 0 ? (
+            <Island className={upcoming.length > 0 ? undefined : 'lg:col-span-3'}>
+              <IslandHeader title="Friends" action={<Link href="/feed" className="text-sm text-accent hover:underline">All</Link>} />
+              <ul className="-my-1 flex flex-col divide-y divide-border">
+                {feed.items.slice(0, 5).map((item) => (
+                  <ActivityItem key={item.activity.id} item={item} />
+                ))}
+              </ul>
+            </Island>
+          ) : following.length === 0 ? (
+            // Following nobody yet: a nudge rather than an empty section.
+            <Island tone="elevated" className={upcoming.length > 0 ? 'flex flex-col justify-center' : 'flex flex-col justify-center lg:col-span-3'}>
+              <span className="mb-3 flex size-10 items-center justify-center rounded-[14px] bg-accent-soft text-accent">
+                <Users className="size-5" />
+              </span>
+              <p className="font-semibold text-fg">Watch with friends</p>
+              <p className="mt-1 text-sm text-fg-muted">Follow people to see what they are watching here.</p>
+              <Link href="/lists" className="mt-3 w-fit rounded-control outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
+                <Button size="sm" variant="secondary" tabIndex={-1} className="cta-arrow">
+                  Find people via lists <ArrowRight className="size-4" />
+                </Button>
+              </Link>
+            </Island>
+          ) : null}
         </div>
-        <Island>
-          <IslandHeader title="Friends" action={<Link href="/feed" className="text-sm font-medium text-accent hover:underline">All</Link>} />
-          {feed.items.length === 0 ? (
-            <p className="text-sm text-fg-muted">
-              Follow people to see what they are watching. <Link href="/lists" className="text-accent hover:underline">Browse lists</Link> to find them.
-            </p>
-          ) : (
-            <ul className="-my-1 flex flex-col divide-y divide-border">
-              {feed.items.slice(0, 5).map((item) => (
-                <ActivityItem key={item.activity.id} item={item} />
-              ))}
-            </ul>
-          )}
-        </Island>
-      </div>
+      ) : null}
 
       {watchlist.length > 0 ? <MediaRow title="From your watchlist" description="Ready when you are" items={watchlist.slice(0, 15).map((w) => cardFromMedia(w.media))} href="/watchlist" /> : null}
       {recent.length > 0 ? (
@@ -116,7 +129,7 @@ async function Dashboard({ user, welcome }: { user: User; welcome: boolean }) {
           hrefLabel="Your profile"
         />
       ) : null}
-      <MediaRow title="Trending this week" description="Across shows, movies and anime" items={trending.slice(0, 20).map(cardFromSummary)} href="/discover" />
+      {trending.length > 0 ? <MediaRow title="Trending this week" description="Across shows, movies and anime" items={trending.slice(0, 20).map(cardFromSummary)} href="/discover" /> : null}
     </div>
   );
 }

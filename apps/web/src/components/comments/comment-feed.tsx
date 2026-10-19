@@ -2,13 +2,14 @@
 
 import type { CommentTarget, CommentView } from '@marutime/core';
 import type { CommentImage, PublicUser } from '@marutime/db';
-import { Avatar, Button, Island, Menu, MenuContent, MenuItem, MenuTrigger, Segmented, Switch, Textarea, cn, fadeUp, springs, useToast } from '@marutime/ui';
-import { Ellipsis, Eye, EyeOff, Flag, Heart, ImagePlus, MessageCircle, Reply, Send, Trash, X } from 'lucide-react';
+import { Avatar, Button, Island, Menu, MenuContent, MenuItem, MenuTrigger, Segmented, Switch, Textarea, Tooltip, cn, fadeUp, springs, useToast } from '@marutime/ui';
+import { Ellipsis, Eye, EyeOff, Flag, ImagePlus, MessageCircle, Reply, Send, Trash, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useRef, useState, useTransition } from 'react';
 import { createCommentAction, deleteCommentAction, hideCommentAction, reportContentAction, toggleCommentLikeAction } from '@/actions/comments';
+import { LikeHeart } from '@/components/like-heart';
 import { formatRelative } from '@/lib/format';
 import { downscaleImage } from '@/lib/client-image';
 
@@ -139,12 +140,14 @@ function Composer({ target, viewer, parentId, onCreated, onCancel, autoFocus, pl
           </div>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-xs text-fg-muted">
-            <Switch checked={spoiler} onCheckedChange={setSpoiler} label="Contains spoilers" />
-            Spoiler
-          </label>
+          <Tooltip content="Blur your comment until readers choose to reveal it">
+            <label className="flex items-center gap-2 text-xs text-fg-muted">
+              <Switch checked={spoiler} onCheckedChange={setSpoiler} label="Contains spoilers" />
+              Spoiler
+            </label>
+          </Tooltip>
           <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} />
-          <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()} loading={uploading} disabled={images.length >= 4}>
+          <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()} loading={uploading} disabled={images.length >= 4} tooltip="Attach up to 4 images (location data is stripped)">
             <ImagePlus className="size-4" /> Image
           </Button>
           <div className="ml-auto flex items-center gap-2">
@@ -182,13 +185,18 @@ function CommentItem({ comment, target, viewer, viewerIsStaff, hideSpoilers, ini
       router.push('/login');
       return;
     }
-    setLiked((l) => !l);
+    const prev = { liked, likeCount };
+    setLiked(!liked);
     setLikeCount((n) => n + (liked ? -1 : 1));
     start(async () => {
       const r = await toggleCommentLikeAction(comment.id);
       if (r.ok) {
         setLiked(r.data.liked);
         setLikeCount(r.data.likeCount);
+      } else {
+        setLiked(prev.liked);
+        setLikeCount(prev.likeCount);
+        toast({ tone: 'error', title: r.error });
       }
     });
   };
@@ -259,9 +267,11 @@ function CommentItem({ comment, target, viewer, viewerIsStaff, hideSpoilers, ini
           ) : null}
         </div>
         <div className="mt-2 flex items-center gap-1 text-xs text-fg-muted">
-          <motion.button type="button" whileTap={{ scale: 0.85 }} transition={springs.pop} onClick={toggleLike} aria-pressed={liked} className={cn('flex items-center gap-1 rounded-pill px-2 py-1 hover:bg-surface-2', liked && 'text-danger')}>
-            <Heart className={cn('size-3.5', liked && 'fill-current')} /> {likeCount || ''}
-          </motion.button>
+          <Tooltip content={liked ? 'Unlike' : 'Like'}>
+            <motion.button type="button" whileTap={{ scale: 0.85 }} transition={springs.pop} onClick={toggleLike} aria-pressed={liked} aria-label={liked ? 'Unlike' : 'Like'} className={cn('flex items-center gap-1 rounded-pill px-2 py-1 transition-colors hover:bg-surface-2', liked && 'text-danger')}>
+              <LikeHeart liked={liked} count={likeCount} hideZero />
+            </motion.button>
+          </Tooltip>
           {viewer && !isReply ? (
             <button type="button" onClick={() => setReplying((r) => !r)} className="flex items-center gap-1 rounded-pill px-2 py-1 hover:bg-surface-2">
               <Reply className="size-3.5" /> Reply
@@ -281,9 +291,11 @@ function CommentItem({ comment, target, viewer, viewerIsStaff, hideSpoilers, ini
             <Menu className="ml-auto">
               <MenuTrigger>
                 {(props) => (
-                  <button type="button" {...props} className="rounded-pill p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-surface-2 focus:opacity-100 aria-expanded:opacity-100" aria-label="More">
-                    <Ellipsis className="size-4" />
-                  </button>
+                  <Tooltip content="More: delete, report, moderate">
+                    <button type="button" {...props} className="rounded-pill p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-surface-2 focus:opacity-100 aria-expanded:opacity-100" aria-label="More">
+                      <Ellipsis className="size-4" />
+                    </button>
+                  </Tooltip>
                 )}
               </MenuTrigger>
               <MenuContent>

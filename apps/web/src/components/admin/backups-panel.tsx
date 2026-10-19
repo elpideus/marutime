@@ -46,10 +46,10 @@ export function BackupsPanel({ backups, encrypted, storage }: { backups: Backup[
               <span className="text-xs text-fg-muted">{formatDateTime(b.startedAt)} · {formatBytes(b.sizeBytes)}</span>
               {b.status === 'completed' ? (
                 <a href={`/api/admin/backups/${b.id}`} download>
-                  <Button size="icon-sm" variant="ghost" aria-label="Download" tabIndex={-1}><Download className="size-4" /></Button>
+                  <Button size="icon-sm" variant="ghost" aria-label="Download" tabIndex={-1} tooltip="Download as stored (encrypted if a key is set)"><Download className="size-4" /></Button>
                 </a>
               ) : null}
-              <Button size="icon-sm" variant="ghost" aria-label="Delete" onClick={() => remove(b.id)}><Trash className="size-4" /></Button>
+              <Button size="icon-sm" variant="ghost" aria-label="Delete" tooltip="Delete this backup file" onClick={() => remove(b.id)}><Trash className="size-4" /></Button>
             </li>
           ))}
           {backups.length === 0 ? <li className="py-6 text-center text-sm text-fg-muted">No backups yet.</li> : null}

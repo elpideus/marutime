@@ -32,12 +32,14 @@ MaruTime is a pnpm monorepo. The web app is thin; nearly all behaviour lives in 
 ## Key domain decisions
 
 - **Media identity**: `media(provider, external_id, type)` is unique. URLs use the TMDB id (`/show/1396-breaking-bad`), like TV Time used TVDB ids, so plugins can deep-link without knowing internal ids.
-- **Sync on demand**: `ensureMedia()` imports or refreshes a title when a page or API call needs it (TTL: 12 h for airing shows, 7 d for ended shows and movies). A daily cron refreshes airing shows that people follow.
+- **Sync on demand, stale-while-revalidate**: `ensureMedia()` imports a title the first time a page or API call needs it. After that, pages always get the stored row immediately; when it is stale (12 h for shows airing this week, 3 d for other running shows, 30 d for ended shows and older movies) one server instance refreshes it in the background under a lease. Routine refreshes only re-fetch seasons that can still change (new, latest, recently aired or undated); every title gets a full pass at most monthly. A daily cron refreshes airing shows that people follow.
+- **Cache** (`core/cache`): `cached(key, { ttl, staleTtl, persist }, fn)` is a two-tier read-through cache: an in-process LRU plus the `cache_entries` table shared by every instance. Stale values are served while a single background refresh runs (`after()` in Next.js), concurrent misses share one upstream call, and failures keep serving the stale copy. Search, trending, discover, genres, people and AniList lookups go through it (`getProvider()`); per-title page data is memoised in memory under a key that includes `syncedAt`, so a re-sync invalidates it automatically. The daily cron prunes expired rows.
 - **Anime**: classified from TMDB (Animation genre plus Japanese origin, or the `anime` keyword), then enriched from AniList by title and year matching. AniList characters (with character art) take precedence over TMDB voice-actor credits in pickers.
 - **Watches**: one row per viewing; rewatches are additional rows. Private fields (`device_id`, `service_id`, `emotions`, `favorite_character_id`, `note`) are never joined into public views; aggregates require at least 3 distinct viewers (`STATS_MIN_VIEWERS`).
 - **Progress**: derived, never stored. "Watch next" is the first aired, unwatched episode per followed show (`DISTINCT ON`); "upcoming" is the first unaired episode.
 - **Lists**: `visibility` is one of public, unlisted, followers, private; `share_token` grants unlisted access; `category` is inferred from items.
-- **Activities**: a public-safe event stream for feeds; never includes private check-in fields.
+- **Activities**: a public-safe event stream for feeds; never includes private check-in fields. Undoing an action (unwatching, unfollowing, unliking, deleting) removes the activity it created, and the friends feed never shows your own activity.
+- **Optimistic UI**: watch state lives in a small client store (`components/tracking/watch-store.ts`) shared by every control. Changes apply instantly, are saved in the background in per-item order, and only failures interrupt with a toast; unwatch and bulk marks offer Undo (the server returns the removed rows so they can be restored).
 - **Settings**: key/value `platform_settings` overlaying defaults in `config`; editable in the admin dashboard; 30 s in-process cache.
 
 ## Web app
@@ -62,4 +64,4 @@ MaruTime is a pnpm monorepo. The web app is thin; nearly all behaviour lives in 
 
 ## Future clients
 
-A mobile app or a plugin needs only `/api/v1` plus a personal access token. The OpenAPI description is served at `/api/v1/openapi.json`. The scrobble endpoint (`POST /api/v1/watch`) accepts TMDB ids with season and episode numbers, which is what Plex, Jellyfin and Kodi expose.
+A mobile app or a plugin needs only `/api/v1` plus a personal access token. The API is off by default (`api.public` platform setting, *Admin → Settings → API*); while it is off it answers 404 to everyone except admins. The OpenAPI description is served at `/api/v1/openapi.json`. The scrobble endpoint (`POST /api/v1/watch`) accepts TMDB ids with season and episode numbers, which is what Plex, Jellyfin and Kodi expose.

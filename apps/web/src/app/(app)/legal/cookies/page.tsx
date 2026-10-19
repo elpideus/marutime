@@ -39,6 +39,7 @@ export default async function CookiesPage() {
         </table>
       </div>
       <H2>What we do not set</H2>
+      <P>Trailers are embedded with YouTube&apos;s privacy-enhanced mode (youtube-nocookie.com), which does not set tracking cookies until you interact with the video; it may use local storage for playback. You can turn background trailers off in your settings.</P>
       <P>No advertising cookies, no third-party analytics, no cross-site tracking. Because every cookie above is either strictly necessary or stores a preference you actively chose, the ePrivacy Directive does not require prior consent; we still inform you with a short notice on your first visit.</P>
       <H2>Local storage</H2>
       <P>Your browser’s local storage may remember that you hid the donation card for two weeks. It never leaves your device.</P>

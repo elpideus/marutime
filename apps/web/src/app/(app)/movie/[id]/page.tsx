@@ -1,17 +1,20 @@
-import { getActiveDevices, getActiveServices, getAnimeDetails, getCharactersForMedia, getComments, getListsContainingMedia, getMovieStats, getUserWatchesForMedia, toPublicUser } from '@marutime/core';
+import { getComments, getListsContainingMedia, getMovieStats, getUserWatchesForMedia, toPublicUser } from '@marutime/core';
 import { mediaHref } from '@marutime/core/media';
 import { getDb } from '@marutime/db';
 import { Island, IslandHeader } from '@marutime/ui';
 import type { Metadata } from 'next';
 import { CommentFeed } from '@/components/comments/comment-feed';
+import { RememberTitle } from '@/components/keyboard/command-palette';
 import { ListCard } from '@/components/lists/list-card';
 import { CastStrip } from '@/components/media/cast-strip';
+import { toCastMember } from '@/lib/cast';
 import { AddToListButton, WatchlistButton } from '@/components/media/media-actions';
 import { MediaHero } from '@/components/media/media-hero';
 import { StatsIsland } from '@/components/tracking/stats-island';
 import { WatchedButton } from '@/components/tracking/watched-button';
 import { formatDate } from '@/lib/format';
-import { loadMedia, loadViewerMediaState } from '@/lib/media-page';
+import { loadAnime, loadCharacters, loadMedia, loadViewerMediaState } from '@/lib/media-page';
+import { renderedAt } from '@/lib/clock';
 import { getCurrentUser, isStaff } from '@/lib/session';
 
 type Props = { params: Promise<{ id: string }> };
@@ -25,27 +28,27 @@ export default async function MoviePage({ params }: Props) {
   const media = await loadMedia('movie', (await params).id);
   const db = getDb();
   const user = await getCurrentUser();
-  const [characters, anime, stats, comments, lists, devices, services, myWatches, viewerState] = await Promise.all([
-    getCharactersForMedia(db, media.id, { limit: 40 }),
-    media.isAnime ? getAnimeDetails(db, media.id) : Promise.resolve(null),
+  const serverAt = renderedAt();
+  const [characters, anime, stats, comments, lists, myWatches, viewerState] = await Promise.all([
+    loadCharacters(media, 40),
+    loadAnime(media),
     getMovieStats(db, media.id),
     getComments(db, { mediaId: media.id }, { viewer: user, limit: 30 }),
     getListsContainingMedia(db, media.id, user?.id ?? null),
-    getActiveDevices(db),
-    getActiveServices(db),
     user ? getUserWatchesForMedia(db, user.id, media.id) : Promise.resolve([]),
     loadViewerMediaState(user, media.id),
   ]);
   const last = myWatches[0];
-  const defaults = user ? { deviceId: user.preferences.defaultDeviceId ?? null, serviceId: user.preferences.defaultServiceId ?? null } : undefined;
   const today = new Date().toISOString().slice(0, 10);
   const unreleased = media.releaseDate ? media.releaseDate > today : false;
 
   return (
     <div className="flex flex-col gap-6">
+      <RememberTitle href={mediaHref(media)} title={media.title} posterPath={media.posterPath} type={media.type} isAnime={media.isAnime} />
       <MediaHero
         media={media}
         anime={anime}
+        autoplayTrailer={user?.preferences.autoplayTrailers !== false}
         actions={
           <>
             {!unreleased ? (
@@ -53,21 +56,18 @@ export default async function MoviePage({ params }: Props) {
                 target={{ kind: 'movie', mediaId: media.id, label: media.title }}
                 watched={myWatches.length > 0}
                 watchCount={myWatches.length}
-                lastWatch={last ? { watchId: last.id, deviceId: last.deviceId, serviceId: last.serviceId, emotions: last.emotions, favoriteCharacterId: last.favoriteCharacterId, note: last.note } : null}
-                devices={devices}
-                services={services}
-                characters={characters}
-                defaults={defaults}
-                signedIn={Boolean(user)}
+                serverAt={serverAt}
+                lastWatch={last ? { watchId: last.id, deviceId: last.deviceId, serviceId: last.serviceId, emotions: last.emotions, favoriteCharacterId: last.favoriteCharacterId, rating: last.rating, note: last.note } : null}
+                characters={characters.map((c) => ({ id: c.id, name: c.name, imageUrl: c.imageUrl, profilePath: c.profilePath }))}
               />
             ) : null}
-            <WatchlistButton mediaId={media.id} inList={viewerState.inWatchlist} signedIn={Boolean(user)} />
+            <WatchlistButton mediaId={media.id} inList={viewerState.inWatchlist} signedIn={Boolean(user)} primary />
             <AddToListButton mediaId={media.id} lists={viewerState.lists} signedIn={Boolean(user)} />
           </>
         }
         meta={unreleased ? <p className="mt-3 text-sm text-accent">Releases {formatDate(media.releaseDate)}</p> : null}
       />
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
           {media.overview || anime?.description ? (
             <Island>
@@ -84,7 +84,7 @@ export default async function MoviePage({ params }: Props) {
         </div>
         <div className="flex flex-col gap-6">
           <StatsIsland stats={stats} />
-          <CastStrip characters={characters} title="Cast" />
+          <CastStrip members={characters.map(toCastMember)} title={media.isAnime ? 'Characters' : 'Cast'} mediaAnilistId={anime?.anilistId} />
           {lists.length > 0 ? (
             <Island>
               <IslandHeader title="Appears in lists" />

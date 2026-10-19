@@ -1,5 +1,6 @@
 export * from './cn';
 export * from './motion';
+export * from './floating';
 export * from './button';
 export * from './island';
 export * from './input';
@@ -10,5 +11,6 @@ export * from './badge';
 export * from './tabs';
 export * from './dialog';
 export * from './menu';
+export * from './tooltip';
 export * from './toast';
 export * from './feedback';

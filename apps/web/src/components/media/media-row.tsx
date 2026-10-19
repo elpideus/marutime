@@ -1,10 +1,11 @@
 'use client';
 
-import { Button, cn, fadeUp, stagger } from '@marutime/ui';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn, fadeUp, springs, stagger } from '@marutime/ui';
+import { ChevronRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import Link from 'next/link';
-import { useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { ScrollRow } from '@/components/scroll-row';
 import type { MediaCardData } from '@/lib/media-card';
 import { MediaCard } from './media-card';
 
@@ -19,10 +20,8 @@ export type MediaRowProps = {
   emptyText?: string;
 };
 
-/** Horizontally scrolling shelf with snap points and arrow buttons on desktop. */
+/** Horizontally scrolling shelf with snap points; arrows appear only when there is more to see. */
 export function MediaRow({ title, description, items, href, hrefLabel = 'See all', renderCard, className, emptyText }: MediaRowProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const scrollBy = (dir: 1 | -1) => ref.current?.scrollBy({ left: dir * (ref.current.clientWidth - 120), behavior: 'smooth' });
   return (
     <section className={cn('relative', className)}>
       <div className="mb-3 flex items-end justify-between gap-4 px-0.5">
@@ -30,38 +29,22 @@ export function MediaRow({ title, description, items, href, hrefLabel = 'See all
           <h2 className="text-lg font-semibold tracking-tight text-fg">{title}</h2>
           {description ? <p className="text-sm text-fg-muted">{description}</p> : null}
         </div>
-        <div className="flex items-center gap-1">
-          {href ? (
-            <Link href={href} className="text-sm font-medium text-accent hover:underline">
-              {hrefLabel}
-            </Link>
-          ) : null}
-          <div className="hidden gap-1 lg:flex">
-            <Button variant="ghost" size="icon-sm" onClick={() => scrollBy(-1)} aria-label="Scroll left">
-              <ChevronLeft className="size-4" />
-            </Button>
-            <Button variant="ghost" size="icon-sm" onClick={() => scrollBy(1)} aria-label="Scroll right">
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        </div>
+        {href ? (
+          <Link href={href} className="cta-arrow inline-flex shrink-0 items-center gap-0.5 text-sm font-medium text-accent">
+            {hrefLabel} <ChevronRight className="size-4" />
+          </Link>
+        ) : null}
       </div>
       {items.length === 0 ? (
         <p className="rounded-island border border-dashed border-border px-4 py-8 text-center text-sm text-fg-muted">{emptyText ?? 'Nothing here yet.'}</p>
       ) : (
-        <motion.div
-          ref={ref}
-          variants={stagger(0.03)}
-          initial="hidden"
-          animate="show"
-          className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 no-scrollbar sm:-mx-6 sm:px-6 [scroll-padding-inline:1rem]"
-        >
+        <ScrollRow label={typeof title === 'string' ? title : 'titles'} className="-mx-4 sm:-mx-6" innerClassName="snap-mandatory px-4 pt-1 pb-3 sm:px-6 [scroll-padding-inline:1rem]">
           {items.map((item, i) => (
-            <motion.div key={item.key} variants={fadeUp} className="snap-start">
+            <motion.div key={item.key} initial={{ opacity: 0, y: 14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ ...springs.bouncy, delay: Math.min(i, 10) * 0.035 }} className="snap-start">
               {renderCard ? renderCard(item, i) : <MediaCard item={item} priority={i < 4} />}
             </motion.div>
           ))}
-        </motion.div>
+        </ScrollRow>
       )}
     </section>
   );

@@ -69,6 +69,7 @@ export async function adminUpdateSettingsAction(_prev: AdminFormState, formData:
       'legal.controllerEmail': str('legal.controllerEmail'),
       'legal.controllerAddress': str('legal.controllerAddress'),
       'legal.country': str('legal.country'),
+      'api.public': bool('api.public'),
       'backup.enabled': bool('backup.enabled'),
       'backup.retentionDays': Math.max(1, Number(formData.get('backup.retentionDays') || 30)),
       'moderation.autoHideReports': Math.max(1, Number(formData.get('moderation.autoHideReports') || 5)),

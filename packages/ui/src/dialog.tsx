@@ -2,11 +2,12 @@
 
 import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from './button';
 import { cn } from './cn';
-import { springs } from './motion';
+import { useIsClient } from './floating';
+import { exitFast, springs } from './motion';
 
 export type DialogProps = {
   open: boolean;
@@ -15,13 +16,13 @@ export type DialogProps = {
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   /** Hide the close button (e.g. blocking flows). */
   dismissible?: boolean;
   className?: string;
 };
 
-const sizes = { sm: 'sm:max-w-sm', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl', xl: 'sm:max-w-4xl' } as const;
+const sizes = { sm: 'sm:max-w-sm', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl', xl: 'sm:max-w-4xl', '2xl': 'sm:max-w-6xl' } as const;
 
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -32,6 +33,9 @@ const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:n
 export function Dialog({ open, onClose, title, description, children, footer, size = 'md', dismissible = true, className }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const isClient = useIsClient();
 
   useEffect(() => {
     if (!open) return;
@@ -72,31 +76,31 @@ export function Dialog({ open, onClose, title, description, children, footer, si
     [dismissible, onClose],
   );
 
-  if (typeof document === 'undefined') return null;
+  if (!isClient) return null;
 
   return createPortal(
     <AnimatePresence>
       {open ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="presentation" onKeyDown={onKeyDown}>
           <motion.div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/55 backdrop-blur-md"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            exit={{ opacity: 0, transition: { duration: 0.18 } }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             onClick={dismissible ? onClose : undefined}
           />
           <motion.div
             ref={panelRef}
             role="dialog"
             aria-modal="true"
-            aria-labelledby={title ? 'mt-dialog-title' : undefined}
-            aria-describedby={description ? 'mt-dialog-description' : undefined}
+            aria-labelledby={title ? titleId : undefined}
+            aria-describedby={description ? descriptionId : undefined}
             tabIndex={-1}
-            initial={{ opacity: 0, y: 48, scale: 0.96 }}
+            initial={{ opacity: 0, y: 56, scale: 0.94 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 24, scale: 0.98, transition: { duration: 0.16 } }}
-            transition={springs.bouncy}
+            exit={{ opacity: 0, y: 24, scale: 0.97, transition: exitFast }}
+            transition={springs.elastic}
             className={cn(
               'relative z-10 flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-island border border-border bg-surface shadow-2xl outline-none sm:rounded-island',
               sizes[size],
@@ -108,12 +112,12 @@ export function Dialog({ open, onClose, title, description, children, footer, si
               <div className="flex items-start justify-between gap-4 px-5 pt-4 sm:px-6 sm:pt-5">
                 <div className="min-w-0">
                   {title ? (
-                    <h2 id="mt-dialog-title" className="text-lg font-semibold tracking-tight text-fg">
+                    <h2 id={titleId} className="text-lg font-semibold tracking-tight text-fg">
                       {title}
                     </h2>
                   ) : null}
                   {description ? (
-                    <p id="mt-dialog-description" className="mt-1 text-sm text-fg-muted">
+                    <p id={descriptionId} className="mt-1 text-sm text-fg-muted">
                       {description}
                     </p>
                   ) : null}

@@ -108,24 +108,74 @@ export type MovieDetails = BaseDetails & {
 
 export type MediaDetails = ShowDetails | MovieDetails;
 
+export type PersonCredit = {
+  type: MediaType;
+  externalId: number;
+  title: string;
+  posterPath: string | null;
+  backdropPath: string | null;
+  releaseDate: string | null;
+  /** Character played (cast) or job (crew). */
+  role: string | null;
+  department: 'cast' | 'crew';
+  episodeCount: number | null;
+  popularity: number;
+  voteAverage: number;
+  voteCount: number;
+  genreIds: number[];
+  isAnime: boolean;
+};
+
+export type PersonDetails = {
+  provider: string;
+  externalId: number;
+  name: string;
+  biography: string | null;
+  birthday: string | null;
+  deathday: string | null;
+  placeOfBirth: string | null;
+  profilePath: string | null;
+  knownForDepartment: string | null;
+  alsoKnownAs: string[];
+  homepage: string | null;
+  imdbId: string | null;
+  /** Up to a few extra portraits. */
+  images: string[];
+  /** Deduplicated works, most notable first. */
+  credits: PersonCredit[];
+};
+
+export type DiscoverFilters = {
+  /** All of these genres must match. */
+  genreIds?: number[];
+};
+
 export type SearchOptions = { type?: MediaType | 'all'; page?: number; year?: number };
 export type PagedResult<T> = { page: number; totalPages: number; totalResults: number; results: T[] };
 
 export type TrendingWindow = 'day' | 'week';
 
 export type DiscoverCategory = 'shows' | 'movies' | 'anime';
-export type DiscoverSort = 'trending' | 'popular' | 'top_rated' | 'upcoming' | 'airing';
+export type DiscoverSort = 'trending' | 'popular' | 'top_rated' | 'upcoming' | 'airing' | 'newest';
 
 export interface MetadataProvider {
   readonly id: string;
   search(query: string, options?: SearchOptions): Promise<PagedResult<MediaSummary>>;
   trending(type: MediaType | 'all', window?: TrendingWindow, page?: number): Promise<PagedResult<MediaSummary>>;
-  discover(category: DiscoverCategory, sort: DiscoverSort, page?: number): Promise<PagedResult<MediaSummary>>;
-  getShow(externalId: number, options?: { seasons?: number[] | 'all' }): Promise<ShowDetails | null>;
+  discover(category: DiscoverCategory, sort: DiscoverSort, page?: number, filters?: DiscoverFilters): Promise<PagedResult<MediaSummary>>;
+  /**
+   * `seasons` picks which seasons' episodes to fetch: none, all, a fixed list,
+   * or a function of the season list (for incremental refreshes).
+   */
+  getShow(externalId: number, options?: { seasons?: SeasonSelection }): Promise<ShowDetails | null>;
   getSeason(showExternalId: number, seasonNumber: number): Promise<SeasonDetails | null>;
   getMovie(externalId: number): Promise<MovieDetails | null>;
   getEpisodeGuestStars(showExternalId: number, seasonNumber: number, episodeNumber: number): Promise<CastMember[]>;
+  getPerson(externalId: number): Promise<PersonDetails | null>;
+  getGenres(type: MediaType): Promise<Genre[]>;
 }
+
+export type SeasonSelection = number[] | 'all' | ((seasons: SeasonSummary[]) => number[]);
 
 export class MetadataError extends Error {
   constructor(

@@ -65,3 +65,12 @@ export async function getDonationConfig(db: DbExecutor): Promise<DonationConfig>
     frequency: s['donation.frequency'],
   };
 }
+
+/**
+ * Whether the public API (/api/v1, personal access tokens) is open to this
+ * person. While `api.public` is off only admins can use it, for testing.
+ */
+export async function isApiAvailable(db: DbExecutor, user: { role: string } | null): Promise<boolean> {
+  if (user?.role === 'admin') return true;
+  return (await getSettings(db))['api.public'];
+}

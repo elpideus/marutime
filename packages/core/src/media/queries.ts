@@ -58,6 +58,34 @@ export async function getEpisodesForMedia(db: DbExecutor, mediaId: number): Prom
     .orderBy(asc(episodes.seasonNumber), asc(episodes.episodeNumber));
 }
 
+export type EpisodePage = { items: Episode[]; total: number };
+
+/** One page of a season's episodes, in order (long seasons load as you scroll). */
+export async function getEpisodesPage(db: DbExecutor, mediaId: number, seasonNumber: number, offset = 0, limit = 40): Promise<EpisodePage> {
+  const where = and(eq(episodes.mediaId, mediaId), eq(episodes.seasonNumber, seasonNumber));
+  const [items, [total]] = await Promise.all([
+    db.select().from(episodes).where(where).orderBy(asc(episodes.episodeNumber)).offset(offset).limit(limit),
+    db.select({ n: sql<number>`count(*)`.mapWith(Number) }).from(episodes).where(where),
+  ]);
+  return { items, total: total?.n ?? 0 };
+}
+
+export type SeasonCounts = { seasonNumber: number; total: number; aired: number };
+
+/** Episode and aired-episode counts per season, for tabs and progress bars. */
+export async function getSeasonSummaries(db: DbExecutor, mediaId: number, today = new Date().toISOString().slice(0, 10)): Promise<SeasonCounts[]> {
+  return db
+    .select({
+      seasonNumber: episodes.seasonNumber,
+      total: sql<number>`count(*)`.mapWith(Number),
+      aired: sql<number>`count(*) filter (where ${episodes.airDate} is not null and ${episodes.airDate} <= ${today})`.mapWith(Number),
+    })
+    .from(episodes)
+    .where(eq(episodes.mediaId, mediaId))
+    .groupBy(episodes.seasonNumber)
+    .orderBy(asc(episodes.seasonNumber));
+}
+
 export async function getEpisodesForSeason(db: DbExecutor, mediaId: number, seasonNumber: number): Promise<Episode[]> {
   return db
     .select()
@@ -86,15 +114,19 @@ export async function getEpisodesByIds(db: DbExecutor, ids: number[]): Promise<M
   return new Map(rows.map((r) => [r.id, r]));
 }
 
-/** Previous and next episode in airing order, for episode page navigation. */
+/**
+ * Previous and next episode in order, for episode page navigation. Regular
+ * episodes step through every season; specials step through season 0.
+ */
 export async function getAdjacentEpisodes(db: DbExecutor, episode: Episode): Promise<{ prev: Episode | null; next: Episode | null }> {
-  const all = await db
-    .select()
-    .from(episodes)
-    .where(and(eq(episodes.mediaId, episode.mediaId), sql`${episodes.seasonNumber} > 0`))
-    .orderBy(asc(episodes.seasonNumber), asc(episodes.episodeNumber));
-  const idx = all.findIndex((e) => e.id === episode.id);
-  return { prev: idx > 0 ? all[idx - 1]! : null, next: idx >= 0 && idx < all.length - 1 ? all[idx + 1]! : null };
+  const pos = sql`(${episodes.seasonNumber}, ${episodes.episodeNumber})`;
+  const here = sql`(${episode.seasonNumber}, ${episode.episodeNumber})`;
+  const scope = and(eq(episodes.mediaId, episode.mediaId), episode.seasonNumber > 0 ? sql`${episodes.seasonNumber} > 0` : eq(episodes.seasonNumber, 0));
+  const [prev, next] = await Promise.all([
+    db.select().from(episodes).where(and(scope, sql`${pos} < ${here}`)).orderBy(desc(episodes.seasonNumber), desc(episodes.episodeNumber)).limit(1),
+    db.select().from(episodes).where(and(scope, sql`${pos} > ${here}`)).orderBy(asc(episodes.seasonNumber), asc(episodes.episodeNumber)).limit(1),
+  ]);
+  return { prev: prev[0] ?? null, next: next[0] ?? null };
 }
 
 function normalizeName(name: string): string {

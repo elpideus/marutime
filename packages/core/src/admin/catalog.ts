@@ -1,6 +1,7 @@
 import { and, asc, count, desc, devices, eq, ilike, media, or, services, sql, watches, type DbExecutor, type Device, type Media, type Service, type User } from '@marutime/db';
 import { z } from 'zod';
 import { errors } from '../errors';
+import { invalidateCatalogCache } from '../tracking/devices';
 import { ensureMedia } from '../media/sync';
 import { parseInput } from '../utils';
 import { logAudit } from './audit';
@@ -39,6 +40,7 @@ export async function upsertDevice(db: DbExecutor, actor: User, rawInput: unknow
     : await db.insert(devices).values(values).onConflictDoUpdate({ target: devices.slug, set: values }).returning();
   if (!row) throw errors.notFound('Device');
   await logAudit(db, { actorId: actor.id, action: 'catalog.device', targetType: 'device', targetId: row.id, meta: values });
+  await invalidateCatalogCache();
   return row;
 }
 
@@ -48,10 +50,12 @@ export async function deleteDevice(db: DbExecutor, actor: User, id: number): Pro
   if ((used?.n ?? 0) > 0) {
     await db.update(devices).set({ isActive: false }).where(eq(devices.id, id));
     await logAudit(db, { actorId: actor.id, action: 'catalog.device.deactivate', targetType: 'device', targetId: id });
+  await invalidateCatalogCache();
     return;
   }
   await db.delete(devices).where(eq(devices.id, id));
   await logAudit(db, { actorId: actor.id, action: 'catalog.device.delete', targetType: 'device', targetId: id });
+  await invalidateCatalogCache();
 }
 
 export async function upsertService(db: DbExecutor, actor: User, rawInput: unknown): Promise<Service> {
@@ -63,6 +67,7 @@ export async function upsertService(db: DbExecutor, actor: User, rawInput: unkno
     : await db.insert(services).values(values).onConflictDoUpdate({ target: services.slug, set: values }).returning();
   if (!row) throw errors.notFound('Service');
   await logAudit(db, { actorId: actor.id, action: 'catalog.service', targetType: 'service', targetId: row.id, meta: values });
+  await invalidateCatalogCache();
   return row;
 }
 
@@ -72,10 +77,12 @@ export async function deleteService(db: DbExecutor, actor: User, id: number): Pr
   if ((used?.n ?? 0) > 0) {
     await db.update(services).set({ isActive: false }).where(eq(services.id, id));
     await logAudit(db, { actorId: actor.id, action: 'catalog.service.deactivate', targetType: 'service', targetId: id });
+  await invalidateCatalogCache();
     return;
   }
   await db.delete(services).where(eq(services.id, id));
   await logAudit(db, { actorId: actor.id, action: 'catalog.service.delete', targetType: 'service', targetId: id });
+  await invalidateCatalogCache();
 }
 
 export async function listMediaAdmin(db: DbExecutor, opts: { q?: string; type?: 'show' | 'movie' | 'all'; page?: number; limit?: number } = {}): Promise<{ items: Array<Media & { watchCount: number }>; total: number }> {
@@ -116,7 +123,8 @@ export async function refreshStaleMedia(db: DbExecutor, limit = 25): Promise<{ r
   let failed = 0;
   for (const r of rows) {
     try {
-      await ensureMedia(db, r.type, r.externalId, { force: true });
+      // Incremental: only re-fetches seasons that can still change (see ensureMedia).
+      await ensureMedia(db, r.type, r.externalId, { wait: true });
       refreshed++;
     } catch {
       failed++;

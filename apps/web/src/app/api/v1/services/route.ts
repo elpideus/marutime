@@ -1,8 +1,14 @@
 import { getActiveServices } from '@marutime/core';
 import { getDb } from '@marutime/db';
-import { NextResponse } from 'next/server';
+import { apiError, apiJson, assertPublicApi } from '@/lib/api-auth';
 
-export async function GET() {
-  const items = await getActiveServices(getDb());
-  return NextResponse.json({ items }, { headers: { 'Cache-Control': 'public, s-maxage=3600' } });
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: Request) {
+  try {
+    await assertPublicApi(request);
+    return apiJson({ items: await getActiveServices(getDb()) });
+  } catch (err) {
+    return apiError(err);
+  }
 }

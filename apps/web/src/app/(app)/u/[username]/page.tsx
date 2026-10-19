@@ -43,7 +43,7 @@ export default async function ProfilePage({ params }: Props) {
       ) : (
         <>
           {stats && stats.topShows.length > 0 ? (
-            <div className="grid gap-6 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <Island className="lg:col-span-2">
                 <IslandHeader title="Most watched" description="By episodes checked in" />
                 <ul className="grid gap-3 sm:grid-cols-2">
@@ -81,7 +81,7 @@ export default async function ProfilePage({ params }: Props) {
           ) : null}
           {watching.length > 0 ? <MediaRow title="Currently watching" items={watching.map((l) => cardFromMedia(l.media))} renderCard={undefined} /> : null}
           {movies.length > 0 ? <MediaRow title="Recently watched movies" items={movies.map((m) => cardFromMedia(m.media))} /> : null}
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <div className="mb-3 flex items-end justify-between">
                 <h2 className="text-lg font-semibold tracking-tight text-fg">Lists</h2>

@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, media, watchlist, type DbExecutor, type Media, 
 import { errors } from '../errors';
 import { mediaCategory } from '../media/category';
 import { getMediaById } from '../media/queries';
-import { recordActivity } from '../social/activity';
+import { recordActivity, removeActivities } from '../social/activity';
 
 export async function addToWatchlist(db: DbExecutor, userId: string, mediaId: number, note?: string | null): Promise<WatchlistEntry> {
   const m = await getMediaById(db, mediaId);
@@ -19,6 +19,7 @@ export async function addToWatchlist(db: DbExecutor, userId: string, mediaId: nu
 
 export async function removeFromWatchlist(db: DbExecutor, userId: string, mediaId: number): Promise<void> {
   await db.delete(watchlist).where(and(eq(watchlist.userId, userId), eq(watchlist.mediaId, mediaId)));
+  await removeActivities(db, { userId, type: 'added_watchlist', mediaId });
 }
 
 export async function isInWatchlist(db: DbExecutor, userId: string, mediaId: number): Promise<boolean> {

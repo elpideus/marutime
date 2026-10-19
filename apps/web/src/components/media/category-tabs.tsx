@@ -27,6 +27,8 @@ export function CategoryTabs({ value, param = 'c', remember = true, size = 'md' 
         const params = new URLSearchParams(sp.toString());
         params.set(param, next);
         params.delete('page');
+        // Genre ids differ between TV and movies.
+        params.delete('g');
         router.push(`${pathname}?${params.toString()}`, { scroll: false });
         if (remember) start(() => setListsCategoryAction(next));
       }}

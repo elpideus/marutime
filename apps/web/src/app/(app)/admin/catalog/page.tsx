@@ -6,7 +6,7 @@ export default async function AdminCatalogPage() {
   const db = getDb();
   const [devices, services] = await Promise.all([getAllDevices(db), getAllServices(db)]);
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <CatalogEditor kind="device" items={devices} />
       <CatalogEditor kind="service" items={services} />
     </div>

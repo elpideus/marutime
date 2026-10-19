@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Island, cn } from '@marutime/ui';
+import { Button, Island, Tooltip, cn } from '@marutime/ui';
 import { Coffee, X } from 'lucide-react';
 import { notifyClientStore, useLocalStorageValue } from '@/lib/client-store';
 
@@ -23,9 +23,11 @@ export function DonationCard({ donation, compact = false, className }: { donatio
   };
   return (
     <Island tone="accent" padding={compact ? 'sm' : 'md'} className={cn('relative', className)}>
-      <button type="button" onClick={dismiss} aria-label="Hide for two weeks" className="absolute top-2 right-2 rounded-md p-1 text-fg-subtle hover:text-fg">
-        <X className="size-3.5" />
-      </button>
+      <Tooltip content="Hide for two weeks" className="absolute top-2 right-2">
+        <button type="button" onClick={dismiss} aria-label="Hide for two weeks" className="rounded-md p-1 text-fg-subtle transition-colors hover:text-fg">
+          <X className="size-3.5" />
+        </button>
+      </Tooltip>
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-accent text-on-accent">
           <Coffee className="size-4" />

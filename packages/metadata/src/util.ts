@@ -9,7 +9,15 @@ export function slugify(input: string): string {
   return base || 'untitled';
 }
 
-/** Anime heuristic shared by providers: animated and of Japanese origin. */
+/** Countries and languages whose animation AniList and fans file under anime (incl. donghua). */
+const ANIME_COUNTRIES = new Set(['JP', 'CN', 'TW', 'HK', 'KR']);
+const ANIME_LANGUAGES = new Set(['ja', 'zh', 'cn', 'ko']);
+
+/**
+ * Anime heuristic shared by providers: animated and of East Asian origin
+ * (Japanese anime plus Chinese donghua such as Link Click), or explicitly
+ * tagged "anime" on TMDB.
+ */
 export function classifyAnime(input: {
   genreIds: number[];
   originCountries: string[];
@@ -19,9 +27,8 @@ export function classifyAnime(input: {
   const ANIMATION_GENRE = 16;
   const ANIME_KEYWORD = 210024;
   if (input.keywordIds?.includes(ANIME_KEYWORD)) return true;
-  const animated = input.genreIds.includes(ANIMATION_GENRE);
-  const japanese = input.originCountries.includes('JP') || input.originalLanguage === 'ja';
-  return animated && japanese;
+  if (!input.genreIds.includes(ANIMATION_GENRE)) return false;
+  return input.originCountries.some((c) => ANIME_COUNTRIES.has(c)) || (input.originalLanguage !== null && ANIME_LANGUAGES.has(input.originalLanguage));
 }
 
 export function emptyPage<T>(page = 1): { page: number; totalPages: number; totalResults: number; results: T[] } {

@@ -17,7 +17,7 @@ export default async function AdminOverviewPage() {
         <StatTile label="Public lists" value={o.content.publicLists.toLocaleString()} hint={`${o.content.comments.toLocaleString()} comments · ${o.content.media.toLocaleString()} titles`} />
         <StatTile label="Open reports" value={o.content.openReports} hint={o.content.openReports ? <Link href="/admin/reports" className="text-accent hover:underline">Review now</Link> : 'All clear'} tone={o.content.openReports ? 'danger' : 'default'} />
       </div>
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Island>
           <IslandHeader title="Sign-ups" description="Last 14 days" />
           <SparkBars data={o.signupsByDay} label="Sign-ups per day" />

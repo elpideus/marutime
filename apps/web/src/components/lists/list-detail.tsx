@@ -3,13 +3,15 @@
 import type { ListView } from '@marutime/core';
 import { listShareHref } from '@marutime/core/hrefs';
 import { mediaHref } from '@marutime/core/hrefs';
-import { Avatar, Badge, Button, Island, cn, fadeUp, springs, stagger, useToast } from '@marutime/ui';
-import { ArrowDown, ArrowUp, Copy, Heart, Link2, Lock, Pencil, Share2, Trash, Users } from 'lucide-react';
+import { Avatar, Badge, Button, Island, fadeUp, springs, stagger, useToast, Tooltip } from '@marutime/ui';
+import { ArrowDown, ArrowUp, Copy, Link2, Lock, Pencil, Share2, Trash, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { deleteListAction, regenerateShareTokenAction, removeListItemAction, reorderListAction, toggleListLikeAction } from '@/actions/lists';
+import { LikeHeart } from '@/components/like-heart';
+import { TypeLabel } from '@/components/media/type-badge';
 import { Poster } from '@/components/media/poster';
 import { formatRelative, yearOf } from '@/lib/format';
 
@@ -29,6 +31,7 @@ export function ListDetail({ view, signedIn, appUrl }: { view: ListView; signedI
       router.push('/login');
       return;
     }
+    const prev = { liked, likeCount };
     setLiked(!liked);
     setLikeCount((c) => c + (liked ? -1 : 1));
     start(async () => {
@@ -36,6 +39,10 @@ export function ListDetail({ view, signedIn, appUrl }: { view: ListView; signedI
       if (r.ok) {
         setLiked(r.data.liked);
         setLikeCount(r.data.likeCount);
+      } else {
+        setLiked(prev.liked);
+        setLikeCount(prev.likeCount);
+        toast({ tone: 'error', title: r.error });
       }
     });
   };
@@ -104,17 +111,17 @@ export function ListDetail({ view, signedIn, appUrl }: { view: ListView; signedI
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <motion.div whileTap={{ scale: 0.9 }} transition={springs.pop}>
-            <Button variant={liked ? 'accent-soft' : 'secondary'} onClick={like} aria-pressed={liked}>
-              <Heart className={cn('size-4', liked && 'fill-current')} /> {likeCount}
+            <Button variant={liked ? 'accent-soft' : 'secondary'} onClick={like} aria-pressed={liked} tooltip={liked ? 'Unlike this list' : 'Like this list'}>
+              <LikeHeart liked={liked} count={likeCount} size="md" />
             </Button>
           </motion.div>
-          <Button variant="secondary" onClick={() => copyLink(false)} aria-label="Copy link">
+          <Button variant="secondary" onClick={() => copyLink(false)} aria-label="Copy link" tooltip="Copy a link to this list">
             <Share2 className="size-4" /> Share
           </Button>
           {view.canEdit ? (
             <>
               {list.visibility === 'unlisted' ? (
-                <Button variant="ghost" onClick={() => copyLink(true)} title="Copy secret link">
+                <Button variant="ghost" onClick={() => copyLink(true)} tooltip="Copy the secret link: anyone with it can view this unlisted list">
                   <Copy className="size-4" /> Secret link
                 </Button>
               ) : null}
@@ -161,14 +168,23 @@ export function ListDetail({ view, signedIn, appUrl }: { view: ListView; signedI
                 <Link href={mediaHref(it.media)} className="block truncate text-sm font-medium text-fg hover:text-accent">
                   {it.media.title}
                 </Link>
-                <p className="truncate text-xs text-fg-muted">{[yearOf(it.media.releaseDate), it.media.isAnime ? 'Anime' : it.media.type === 'show' ? 'Show' : 'Movie'].filter(Boolean).join(' · ')}</p>
+                <p className="flex items-center gap-1.5 truncate text-xs text-fg-muted">
+                  {yearOf(it.media.releaseDate) ? <span>{yearOf(it.media.releaseDate)}</span> : null}
+                  <TypeLabel type={it.media.type} isAnime={it.media.isAnime} />
+                </p>
                 {it.item.note ? <p className="mt-1 line-clamp-3 text-xs text-fg-muted italic">“{it.item.note}”</p> : null}
               </div>
               {editing ? (
                 <div className="absolute top-2 right-2 flex flex-col gap-1 rounded-control bg-black/70 p-1 backdrop-blur">
-                  <button type="button" onClick={() => move(i, -1)} className="rounded p-1 text-white hover:bg-white/20" aria-label="Move up"><ArrowUp className="size-4" /></button>
-                  <button type="button" onClick={() => move(i, 1)} className="rounded p-1 text-white hover:bg-white/20" aria-label="Move down"><ArrowDown className="size-4" /></button>
-                  <button type="button" onClick={() => remove(it.media.id)} className="rounded p-1 text-danger hover:bg-white/20" aria-label="Remove"><Trash className="size-4" /></button>
+                  <Tooltip content="Move up" side="left">
+                    <button type="button" onClick={() => move(i, -1)} className="rounded p-1 text-white hover:bg-white/20" aria-label="Move up"><ArrowUp className="size-4" /></button>
+                  </Tooltip>
+                  <Tooltip content="Move down" side="left">
+                    <button type="button" onClick={() => move(i, 1)} className="rounded p-1 text-white hover:bg-white/20" aria-label="Move down"><ArrowDown className="size-4" /></button>
+                  </Tooltip>
+                  <Tooltip content="Remove from list" side="left">
+                    <button type="button" onClick={() => remove(it.media.id)} className="rounded p-1 text-danger hover:bg-white/20" aria-label="Remove"><Trash className="size-4" /></button>
+                  </Tooltip>
                 </div>
               ) : null}
             </motion.li>

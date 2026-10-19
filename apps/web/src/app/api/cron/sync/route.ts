@@ -1,6 +1,6 @@
 import { purgeExpiredSessions } from '@marutime/auth';
 import { getEnv } from '@marutime/config';
-import { refreshStaleMedia } from '@marutime/core';
+import { pruneCache, refreshStaleMedia } from '@marutime/core';
 import { getDb, loginAttempts, lt } from '@marutime/db';
 import { NextResponse } from 'next/server';
 
@@ -15,7 +15,8 @@ export async function GET(request: Request) {
   const media = await refreshStaleMedia(db, 25);
   const sessions = await purgeExpiredSessions(db);
   const attempts = await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000))).returning({ id: loginAttempts.id });
-  return NextResponse.json({ media, purgedSessions: sessions, purgedLoginAttempts: attempts.length });
+  const cache = await pruneCache(db).catch(() => 0);
+  return NextResponse.json({ media, purgedSessions: sessions, purgedLoginAttempts: attempts.length, prunedCacheEntries: cache });
 }
 
 export const POST = GET;

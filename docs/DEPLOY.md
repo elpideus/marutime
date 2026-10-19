@@ -42,6 +42,8 @@ Then sign in at `/login`, change your password in *Settings → Account*, and fi
 
 Run `pnpm db:migrate` again whenever a release adds a migration. Deploys never alter the schema by themselves, which keeps them safe to roll back.
 
+> Upgrading an existing install: migration `0001_cache_and_people` adds the `cache_entries` table (the shared cache), voice-actor columns on `characters`, and re-flags existing Chinese/Korean animation (donghua such as *Link Click*) as anime. Run `pnpm db:migrate` before deploying this release: the new `characters` columns are read by title pages.
+
 ### Free-tier notes
 - Images are served straight from TMDB and R2, so no Vercel image optimisation quota is used.
 - The serverless body limit is 4.5 MB; the uploader downsizes images in the browser first.

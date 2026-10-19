@@ -1,5 +1,6 @@
 import { EMOTION_IDS, LIMITS } from '@marutime/config';
 import {
+  activities,
   and,
   asc,
   characters,
@@ -26,7 +27,7 @@ import {
 } from '@marutime/db';
 import { z } from 'zod';
 import { errors } from '../errors';
-import { recordActivity } from '../social/activity';
+import { recordActivity, removeActivities } from '../social/activity';
 import { parseInput, todayIso } from '../utils';
 
 export const checkInSchema = z.object({
@@ -229,25 +230,161 @@ export async function updateWatch(db: DbExecutor, userId: string, watchId: strin
   return updated!;
 }
 
-export async function deleteWatch(db: DbExecutor, userId: string, watchId: string): Promise<void> {
-  await db.delete(watches).where(and(eq(watches.id, watchId), eq(watches.userId, userId)));
-}
-
-/** Remove every viewing of an episode (undo "watched"). */
-export async function unwatchEpisode(db: DbExecutor, userId: string, episodeId: number): Promise<number> {
-  const deleted = await db.delete(watches).where(and(eq(watches.userId, userId), eq(watches.episodeId, episodeId))).returning({ id: watches.id, mediaId: watches.mediaId });
-  if (deleted[0]) {
-    await db
-      .update(showTracking)
-      .set({ status: 'watching', updatedAt: new Date() })
-      .where(and(eq(showTracking.userId, userId), eq(showTracking.mediaId, deleted[0].mediaId), eq(showTracking.status, 'completed')));
+/**
+ * After watches are removed, take back feed activities that no longer hold:
+ * "watched S01E02" for episodes that are no longer watched, "started" when
+ * nothing is watched any more, and "finished" when the show is not finished.
+ */
+export async function reconcileWatchActivities(db: DbExecutor, userId: string, mediaId: number): Promise<void> {
+  const acts = await db
+    .select({ id: activities.id, type: activities.type, episodeId: activities.episodeId })
+    .from(activities)
+    .where(and(eq(activities.userId, userId), eq(activities.mediaId, mediaId), inArray(activities.type, ['watched_episode', 'watched_movie', 'started_show', 'finished_show'])));
+  if (acts.length === 0) return;
+  const rows = await db.selectDistinct({ episodeId: watches.episodeId }).from(watches).where(and(eq(watches.userId, userId), eq(watches.mediaId, mediaId)));
+  const watchedEpisodes = new Set(rows.filter((r) => r.episodeId !== null).map((r) => r.episodeId!));
+  const movieWatched = rows.some((r) => r.episodeId === null);
+  const anything = watchedEpisodes.size > 0 || movieWatched;
+  const stale = acts.filter((a) => (a.type === 'watched_episode' && (!a.episodeId || !watchedEpisodes.has(a.episodeId))) || (a.type === 'watched_movie' && !movieWatched) || (a.type === 'started_show' && !anything)).map((a) => a.id);
+  if (acts.some((a) => a.type === 'finished_show')) {
+    const [m] = await db.select().from(media).where(eq(media.id, mediaId)).limit(1);
+    if (!anything || !m || !(await checkShowFinished(db, userId, m))) stale.push(...acts.filter((a) => a.type === 'finished_show').map((a) => a.id));
   }
-  return deleted.length;
+  await removeActivities(db, { userId, type: ['watched_episode', 'watched_movie', 'started_show', 'finished_show'], ids: stale });
 }
 
-export async function unwatchMovie(db: DbExecutor, userId: string, mediaId: number): Promise<number> {
-  const deleted = await db.delete(watches).where(and(eq(watches.userId, userId), eq(watches.mediaId, mediaId), isNull(watches.episodeId))).returning({ id: watches.id });
-  return deleted.length;
+/** A completed show with something unwatched again is back to "watching". */
+async function reopenTracking(db: DbExecutor, userId: string, mediaId: number): Promise<void> {
+  await db
+    .update(showTracking)
+    .set({ status: 'watching', updatedAt: new Date() })
+    .where(and(eq(showTracking.userId, userId), eq(showTracking.mediaId, mediaId), eq(showTracking.status, 'completed')));
+}
+
+async function afterRemoval(db: DbExecutor, userId: string, removed: Watch[]): Promise<void> {
+  const mediaIds = Array.from(new Set(removed.map((w) => w.mediaId)));
+  for (const mediaId of mediaIds) {
+    if (removed.some((w) => w.mediaId === mediaId && w.episodeId !== null)) await reopenTracking(db, userId, mediaId);
+    await reconcileWatchActivities(db, userId, mediaId);
+  }
+}
+
+export async function deleteWatch(db: DbExecutor, userId: string, watchId: string): Promise<void> {
+  await deleteWatches(db, userId, [watchId]);
+}
+
+/** Delete specific viewings (e.g. undoing a bulk mark). Returns what was removed. */
+export async function deleteWatches(db: DbExecutor, userId: string, watchIds: string[]): Promise<Watch[]> {
+  if (watchIds.length === 0) return [];
+  const removed: Watch[] = [];
+  for (const ids of chunkIds(watchIds)) {
+    removed.push(...(await db.delete(watches).where(and(eq(watches.userId, userId), inArray(watches.id, ids))).returning()));
+  }
+  await afterRemoval(db, userId, removed);
+  return removed;
+}
+
+/** Remove every viewing of an episode (undo "watched"). Returns the removed rows so the action can be undone. */
+export async function unwatchEpisode(db: DbExecutor, userId: string, episodeId: number): Promise<Watch[]> {
+  const removed = await db.delete(watches).where(and(eq(watches.userId, userId), eq(watches.episodeId, episodeId))).returning();
+  await afterRemoval(db, userId, removed);
+  return removed;
+}
+
+export async function unwatchMovie(db: DbExecutor, userId: string, mediaId: number): Promise<Watch[]> {
+  const removed = await db.delete(watches).where(and(eq(watches.userId, userId), eq(watches.mediaId, mediaId), isNull(watches.episodeId))).returning();
+  await afterRemoval(db, userId, removed);
+  return removed;
+}
+
+/** Unmark a whole season (or a set of episodes) of a show. Returns the removed rows. */
+export async function unwatchEpisodes(db: DbExecutor, userId: string, mediaId: number, input: { seasonNumber?: number; episodeIds?: number[] }): Promise<Watch[]> {
+  if (input.seasonNumber === undefined && !input.episodeIds?.length) return [];
+  const episodeFilter =
+    input.seasonNumber !== undefined
+      ? inArray(watches.episodeId, db.select({ id: episodes.id }).from(episodes).where(and(eq(episodes.mediaId, mediaId), eq(episodes.seasonNumber, input.seasonNumber))))
+      : inArray(watches.episodeId, input.episodeIds!);
+  const removed = await db.delete(watches).where(and(eq(watches.userId, userId), eq(watches.mediaId, mediaId), episodeFilter)).returning();
+  await afterRemoval(db, userId, removed);
+  return removed;
+}
+
+export const restoreWatchSchema = z.object({
+  mediaId: z.number().int().positive(),
+  episodeId: z.number().int().positive().nullable(),
+  watchedAt: z.coerce.date(),
+  deviceId: z.number().int().positive().nullable().optional(),
+  serviceId: z.number().int().positive().nullable().optional(),
+  emotions: z.array(z.enum(EMOTION_IDS as unknown as [string, ...string[]])).max(EMOTION_IDS.length).default([]),
+  favoriteCharacterId: z.number().int().positive().nullable().optional(),
+  rating: z.number().int().min(1).max(10).nullable().optional(),
+  note: z.string().trim().max(LIMITS.watchNoteMax).nullable().optional(),
+  source: z.enum(['web', 'api', 'import', 'bulk']).default('web'),
+});
+
+export type RestorableWatch = z.input<typeof restoreWatchSchema>;
+
+/**
+ * Put back viewings removed moments ago (the "Undo" on an unwatch toast).
+ * Rows come from the client, so each is re-validated and always owned by the
+ * caller; references that no longer resolve are dropped rather than trusted.
+ */
+export async function restoreWatches(db: DbExecutor, userId: string, raw: RestorableWatch[]): Promise<number> {
+  const rows = parseInput(z.array(restoreWatchSchema).max(5000), raw);
+  if (rows.length === 0) return 0;
+  const mediaIds = Array.from(new Set(rows.map((r) => r.mediaId)));
+  const episodeIds = Array.from(new Set(rows.map((r) => r.episodeId).filter((x): x is number => x !== null)));
+  const [mediaRows, episodeRows, deviceRows, serviceRows, characterRows] = await Promise.all([
+    db.select({ id: media.id, type: media.type }).from(media).where(inArray(media.id, mediaIds)),
+    episodeIds.length ? db.select({ id: episodes.id, mediaId: episodes.mediaId }).from(episodes).where(inArray(episodes.id, episodeIds)) : Promise.resolve([]),
+    db.select({ id: devices.id }).from(devices),
+    db.select({ id: services.id }).from(services),
+    db.select({ id: characters.id, mediaId: characters.mediaId }).from(characters).where(inArray(characters.mediaId, mediaIds)),
+  ]);
+  const mediaType = new Map(mediaRows.map((m) => [m.id, m.type]));
+  const episodeMedia = new Map(episodeRows.map((e) => [e.id, e.mediaId]));
+  const deviceIds = new Set(deviceRows.map((d) => d.id));
+  const serviceIds = new Set(serviceRows.map((d) => d.id));
+  const characterMedia = new Map(characterRows.map((c) => [c.id, c.mediaId]));
+  const now = Date.now();
+  const values = rows
+    .filter((r) => mediaType.has(r.mediaId) && (r.episodeId === null ? mediaType.get(r.mediaId) === 'movie' : episodeMedia.get(r.episodeId) === r.mediaId))
+    .map((r) => ({
+      userId,
+      mediaId: r.mediaId,
+      episodeId: r.episodeId,
+      watchedAt: r.watchedAt.getTime() > now ? new Date() : r.watchedAt,
+      deviceId: r.deviceId && deviceIds.has(r.deviceId) ? r.deviceId : null,
+      serviceId: r.serviceId && serviceIds.has(r.serviceId) ? r.serviceId : null,
+      emotions: r.emotions,
+      favoriteCharacterId: r.favoriteCharacterId && characterMedia.get(r.favoriteCharacterId) === r.mediaId ? r.favoriteCharacterId : null,
+      rating: r.rating ?? null,
+      note: r.note || null,
+      source: r.source,
+    }));
+  for (let i = 0; i < values.length; i += 500) await db.insert(watches).values(values.slice(i, i + 500));
+  for (const mediaId of mediaIds) {
+    if (mediaType.get(mediaId) !== 'show') continue;
+    const latest = values.filter((v) => v.mediaId === mediaId).reduce<Date | null>((a, v) => (!a || v.watchedAt > a ? v.watchedAt : a), null);
+    if (latest) await ensureTracking(db, userId, mediaId, latest);
+  }
+  return values.length;
+}
+
+/** The viewer's most recent check-in for an episode or movie, to prefill "edit". */
+export async function getLatestWatch(db: DbExecutor, userId: string, target: { episodeId: number } | { mediaId: number }): Promise<Watch | null> {
+  const where =
+    'episodeId' in target
+      ? and(eq(watches.userId, userId), eq(watches.episodeId, target.episodeId))
+      : and(eq(watches.userId, userId), eq(watches.mediaId, target.mediaId), isNull(watches.episodeId));
+  const [row] = await db.select().from(watches).where(where).orderBy(desc(watches.watchedAt)).limit(1);
+  return row ?? null;
+}
+
+function chunkIds<T>(ids: T[], size = 500): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < ids.length; i += size) out.push(ids.slice(i, i + size));
+  return out;
 }
 
 export const bulkMarkSchema = z.object({
@@ -261,8 +398,10 @@ export const bulkMarkSchema = z.object({
 
 export type BulkMarkInput = z.input<typeof bulkMarkSchema>;
 
+export type BulkMarkResult = { marked: number; watchIds: string[]; episodes: Array<{ id: number; seasonNumber: number }> };
+
 /** Mark many aired episodes watched at once (whole show, a season, or "up to here"). */
-export async function markEpisodesWatched(db: DbExecutor, userId: string, mediaId: number, rawInput: BulkMarkInput = {}): Promise<{ marked: number }> {
+export async function markEpisodesWatched(db: DbExecutor, userId: string, mediaId: number, rawInput: BulkMarkInput = {}): Promise<BulkMarkResult> {
   const input = parseInput(bulkMarkSchema, rawInput);
   const [mediaRow] = await db.select().from(media).where(and(eq(media.id, mediaId), eq(media.type, 'show'))).limit(1);
   if (!mediaRow) throw errors.notFound('Show');
@@ -293,12 +432,13 @@ export async function markEpisodesWatched(db: DbExecutor, userId: string, mediaI
   const targets = boundary
     ? candidates.filter((e) => e.seasonNumber < boundary!.seasonNumber || (e.seasonNumber === boundary!.seasonNumber && e.episodeNumber <= boundary!.episodeNumber))
     : candidates;
-  if (targets.length === 0) return { marked: 0 };
+  if (targets.length === 0) return { marked: 0, watchIds: [], episodes: [] };
 
   const now = new Date();
   const ids = targets.map((t) => t.id);
+  const watchIds: string[] = [];
   for (let i = 0; i < ids.length; i += 500) {
-    await db.insert(watches).values(
+    const inserted = await db.insert(watches).values(
       ids.slice(i, i + 500).map((episodeId) => ({
         userId,
         mediaId,
@@ -309,7 +449,8 @@ export async function markEpisodesWatched(db: DbExecutor, userId: string, mediaI
         emotions: [],
         source: 'bulk' as const,
       })),
-    );
+    ).returning({ id: watches.id });
+    watchIds.push(...inserted.map((w) => w.id));
   }
   const { existed } = await ensureTracking(db, userId, mediaId, now);
   await db.delete(watchlist).where(and(eq(watchlist.userId, userId), eq(watchlist.mediaId, mediaId)));
@@ -326,11 +467,15 @@ export async function markEpisodesWatched(db: DbExecutor, userId: string, mediaI
     await db.update(showTracking).set({ status: 'completed', updatedAt: now }).where(and(eq(showTracking.userId, userId), eq(showTracking.mediaId, mediaId)));
     await recordActivity(db, { userId, type: 'finished_show', mediaId });
   }
-  return { marked: targets.length };
+  return { marked: targets.length, watchIds, episodes: targets.map((t) => ({ id: t.id, seasonNumber: t.seasonNumber })) };
 }
 
 export async function getUserWatchesForMedia(db: DbExecutor, userId: string, mediaId: number): Promise<Watch[]> {
   return db.select().from(watches).where(and(eq(watches.userId, userId), eq(watches.mediaId, mediaId))).orderBy(desc(watches.watchedAt));
+}
+
+export async function getUserWatchesForEpisode(db: DbExecutor, userId: string, episodeId: number): Promise<Watch[]> {
+  return db.select().from(watches).where(and(eq(watches.userId, userId), eq(watches.episodeId, episodeId))).orderBy(desc(watches.watchedAt));
 }
 
 /** Map of episodeId → viewings for quick "watched" badges on season lists. */
@@ -344,6 +489,18 @@ export async function getUserEpisodeWatchMap(db: DbExecutor, userId: string, med
     map.set(w.episodeId, arr);
   }
   return map;
+}
+
+export type EpisodeWatchCount = { episodeId: number; seasonNumber: number; count: number };
+
+/** Compact "what have I watched of this show": one row per watched episode. */
+export async function getEpisodeWatchCounts(db: DbExecutor, userId: string, mediaId: number): Promise<EpisodeWatchCount[]> {
+  return db
+    .select({ episodeId: episodes.id, seasonNumber: episodes.seasonNumber, count: count() })
+    .from(watches)
+    .innerJoin(episodes, eq(watches.episodeId, episodes.id))
+    .where(and(eq(watches.userId, userId), eq(watches.mediaId, mediaId)))
+    .groupBy(episodes.id, episodes.seasonNumber);
 }
 
 export async function getWatchedMediaIds(db: DbExecutor, userId: string, mediaIds: number[]): Promise<Set<number>> {

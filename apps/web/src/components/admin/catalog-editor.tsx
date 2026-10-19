@@ -56,7 +56,7 @@ export function CatalogEditor({ kind, items }: { kind: Kind; items: Array<Device
               {!item.isActive ? <span className="ml-2 rounded-pill bg-surface-3 px-1.5 text-[10px] text-fg-muted uppercase">inactive</span> : null}
             </span>
             <Button size="xs" variant="ghost" onClick={() => edit(item)}>Edit</Button>
-            <Button size="icon-sm" variant="ghost" onClick={() => remove(item.id)} aria-label="Delete"><Trash className="size-4" /></Button>
+            <Button size="icon-sm" variant="ghost" onClick={() => remove(item.id)} aria-label="Delete" tooltip="Delete (deactivated instead if anyone used it)"><Trash className="size-4" /></Button>
           </li>
         ))}
       </ul>

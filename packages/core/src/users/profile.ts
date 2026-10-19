@@ -45,6 +45,12 @@ export const preferencesSchema = z.object({
   emailNotifications: z.boolean().optional(),
   defaultDeviceId: z.number().int().nullable().optional(),
   defaultServiceId: z.number().int().nullable().optional(),
+  autoplayTrailers: z.boolean().optional(),
+  /** Custom keyboard shortcuts: action id → key sequence (e.g. "g h", "mod+k"); null disables. */
+  keybindings: z
+    .record(z.string().regex(/^[a-z][a-z0-9.-]{1,40}$/), z.string().trim().max(32).nullable())
+    .refine((r) => Object.keys(r).length <= 80, 'Too many shortcuts')
+    .optional(),
 });
 
 export async function updateProfile(db: DbExecutor, userId: string, rawInput: UpdateProfileInput): Promise<User> {

@@ -143,17 +143,81 @@ export async function getUpcoming(db: DbExecutor, userId: string, limit = 30): P
 
 export type LibraryShow = { media: Media; tracking: ShowTracking; progress: ShowProgress };
 
-/** Every followed show with progress, for the "My shows" page. */
+/**
+ * Every followed show with progress, for the "My shows" page. A constant
+ * five queries however many shows are followed (no per-show round trips and
+ * no loading of whole episode lists).
+ */
 export async function getLibrary(db: DbExecutor, userId: string): Promise<LibraryShow[]> {
+  const today = todayIso();
   const rows = await db
     .select({ media, tracking: showTracking })
     .from(showTracking)
     .innerJoin(media, eq(showTracking.mediaId, media.id))
     .where(eq(showTracking.userId, userId))
     .orderBy(desc(showTracking.lastWatchedAt), desc(showTracking.createdAt));
-  const out: LibraryShow[] = [];
-  for (const r of rows) out.push({ media: r.media, tracking: r.tracking, progress: await getShowProgress(db, userId, r.media.id) });
-  return out;
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.media.id);
+  const regular = and(inArray(episodes.mediaId, ids), gt(episodes.seasonNumber, 0));
+  const watchedByUser = sql`exists (select 1 from ${watches} w where w.user_id = ${userId} and w.episode_id = ${episodes.id})`;
+  const isAired = sql`${episodes.airDate} is not null and ${episodes.airDate} <= ${today}`;
+
+  const [counts, watchedAll, nextRows, upcomingRows] = await Promise.all([
+    db
+      .select({
+        mediaId: episodes.mediaId,
+        total: sql<number>`count(*)`.mapWith(Number),
+        aired: sql<number>`count(*) filter (where ${isAired})`.mapWith(Number),
+        watchedAired: sql<number>`count(*) filter (where ${isAired} and ${watchedByUser})`.mapWith(Number),
+      })
+      .from(episodes)
+      .where(regular)
+      .groupBy(episodes.mediaId),
+    db
+      .select({ mediaId: watches.mediaId, n: sql<number>`count(distinct ${watches.episodeId})`.mapWith(Number) })
+      .from(watches)
+      .where(and(eq(watches.userId, userId), inArray(watches.mediaId, ids), isNotNull(watches.episodeId)))
+      .groupBy(watches.mediaId),
+    db
+      .selectDistinctOn([episodes.mediaId], { episode: episodes })
+      .from(episodes)
+      .where(and(regular, isAired, sql`not ${watchedByUser}`))
+      .orderBy(asc(episodes.mediaId), asc(episodes.seasonNumber), asc(episodes.episodeNumber)),
+    db
+      .selectDistinctOn([episodes.mediaId], { episode: episodes })
+      .from(episodes)
+      .where(and(regular, isNotNull(episodes.airDate), gt(episodes.airDate, today)))
+      .orderBy(asc(episodes.mediaId), asc(episodes.seasonNumber), asc(episodes.episodeNumber)),
+  ]);
+  const countBy = new Map(counts.map((c) => [c.mediaId, c]));
+  const watchedBy = new Map(watchedAll.map((w) => [w.mediaId, w.n]));
+  const nextBy = new Map(nextRows.map((r) => [r.episode.mediaId, r.episode]));
+  const upcomingBy = new Map(upcomingRows.map((r) => [r.episode.mediaId, r.episode]));
+
+  return rows.map((r) => {
+    const c = countBy.get(r.media.id);
+    const aired = c?.aired ?? 0;
+    const watchedAired = c?.watchedAired ?? 0;
+    const nextEpisode = nextBy.get(r.media.id) ?? null;
+    return {
+      media: r.media,
+      tracking: r.tracking,
+      progress: {
+        mediaId: r.media.id,
+        totalEpisodes: c?.total ?? 0,
+        airedEpisodes: aired,
+        watchedEpisodes: watchedBy.get(r.media.id) ?? 0,
+        remaining: aired - watchedAired,
+        percent: aired ? Math.round((watchedAired / aired) * 100) : 0,
+        nextEpisode,
+        upcomingEpisode: upcomingBy.get(r.media.id) ?? null,
+        lastWatchedAt: r.tracking.lastWatchedAt,
+        isTracked: true,
+        status: r.tracking.status,
+        isUpToDate: nextEpisode === null,
+      },
+    };
+  });
 }
 
 export type RecentWatch = { watchId: string; watchedAt: Date; media: Media; episode: Episode | null };

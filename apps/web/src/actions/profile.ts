@@ -2,7 +2,7 @@
 
 import { createApiToken, invalidateSessionById, invalidateAllUserSessions, revokeApiToken, verifyPassword, type ApiScope } from '@marutime/auth';
 import { SOCIAL_PLATFORMS } from '@marutime/config';
-import { changePassword, deleteAccount, deleteUserFiles, errors, isAppError, removeUserImage, requestEmailChange, updatePreferences, updateProfile, unlinkAccount, type UpdateProfileInput } from '@marutime/core';
+import { changePassword, deleteAccount, deleteUserFiles, errors, isApiAvailable, isAppError, removeUserImage, requestEmailChange, updatePreferences, updateProfile, unlinkAccount, type UpdateProfileInput } from '@marutime/core';
 import { getDb } from '@marutime/db';
 import { getStorage } from '@marutime/storage';
 import { redirect, unstable_rethrow } from 'next/navigation';
@@ -102,6 +102,7 @@ export async function signOutEverywhereAction(): Promise<ActionResult> {
 export async function createApiTokenAction(_prev: FormState, formData: FormData): Promise<FormState> {
   try {
     const user = await me();
+    if (!(await isApiAvailable(getDb(), user))) return { error: 'The API is not available yet.' };
     const scopes = formData.getAll('scopes').map(String).filter(Boolean) as ApiScope[];
     const name = String(formData.get('name') ?? '').trim();
     if (!name) return { error: 'Give the token a name', details: { name: ['Required'] } };

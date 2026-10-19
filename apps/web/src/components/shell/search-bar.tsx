@@ -1,12 +1,14 @@
 'use client';
 
 import { img } from '@marutime/metadata/images';
-import { Badge, Spinner, cn, springs } from '@marutime/ui';
+import { Spinner, cn, springs } from '@marutime/ui';
 import { Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { useShortcutKeys } from '@/components/keyboard/shortcut-provider';
+import { TypeBadge } from '@/components/media/type-badge';
 
 type Result = { href: string; title: string; posterPath: string | null; year: string; type: 'show' | 'movie'; isAnime: boolean };
 
@@ -20,16 +22,8 @@ export function SearchBar({ className, autoFocus = false }: { className?: string
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  // Focusing with "/" (or the viewer's own binding) is handled by the shortcut system.
+  const searchKeys = useShortcutKeys('search.focus');
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ctrl = useRef<AbortController | null>(null);
@@ -123,7 +117,7 @@ export function SearchBar({ className, autoFocus = false }: { className?: string
             <X className="size-4" />
           </button>
         ) : (
-          <kbd className="hidden rounded-md border border-border bg-surface-2 px-1.5 text-[10px] text-fg-subtle sm:inline">/</kbd>
+          searchKeys ? <kbd className="hidden rounded-md border border-border bg-surface-2 px-1.5 text-[10px] text-fg-subtle sm:inline">{searchKeys.join(' ')}</kbd> : null
         )}
       </div>
       <AnimatePresence>
@@ -157,7 +151,7 @@ export function SearchBar({ className, autoFocus = false }: { className?: string
                     <span className="block truncate text-sm font-medium text-fg">{r.title}</span>
                     <span className="block text-xs text-fg-muted">{r.year}</span>
                   </span>
-                  <Badge tone={r.isAnime ? 'accent' : 'neutral'}>{r.isAnime ? 'Anime' : r.type === 'show' ? 'Show' : 'Movie'}</Badge>
+                  <TypeBadge type={r.type} isAnime={r.isAnime} />
                 </Link>
               ))
             )}

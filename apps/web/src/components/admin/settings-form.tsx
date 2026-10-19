@@ -24,6 +24,7 @@ export function SettingsForm({ settings }: { settings: PlatformSettings }) {
   const [verify, setVerify] = useState(settings['site.requireEmailVerification']);
   const [donate, setDonate] = useState(settings['donation.enabled']);
   const [backup, setBackup] = useState(settings['backup.enabled']);
+  const [api, setApi] = useState(settings['api.public']);
   return (
     <form action={action} className="flex flex-col gap-6">
       <Island>
@@ -40,6 +41,16 @@ export function SettingsForm({ settings }: { settings: PlatformSettings }) {
             <Switch checked={verify} onCheckedChange={setVerify} name="site.requireEmailVerification" label="Require email verification" />
           </label>
         </div>
+      </Island>
+      <Island>
+        <IslandHeader title="API" description="The /api/v1 API and personal access tokens for apps and player plugins." />
+        <label className="flex items-center justify-between gap-3 rounded-card border border-border p-3 text-sm">
+          <span>
+            <span className="block font-medium text-fg">Public API</span>
+            <span className="text-xs text-fg-muted">While off, the API answers 404 and the API tokens settings are hidden for everyone except admins.</span>
+          </span>
+          <Switch checked={api} onCheckedChange={setApi} name="api.public" label="Public API" />
+        </label>
       </Island>
       <Island>
         <IslandHeader title="Donation call to action" description="Kept deliberately quiet. Shown only where you allow it." />

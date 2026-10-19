@@ -27,7 +27,7 @@ import { z } from 'zod';
 import { errors } from '../errors';
 import { mediaCategory } from '../media/category';
 import { getMediaById } from '../media/queries';
-import { recordActivity } from '../social/activity';
+import { recordActivity, removeActivities } from '../social/activity';
 import { createNotification } from '../social/notifications';
 import { isFollowing } from '../users/profile';
 import { parseInput, shortId, slugify } from '../utils';
@@ -137,6 +137,7 @@ export async function deleteList(db: DbExecutor, actor: User, listId: string): P
   if (!current) throw errors.notFound('List');
   if (current.ownerId !== actor.id && !isMod(actor)) throw errors.forbidden();
   await db.update(lists).set({ deletedAt: new Date() }).where(eq(lists.id, listId));
+  await removeActivities(db, { userId: current.ownerId, type: ['created_list', 'liked_list'], listId });
 }
 
 export async function getListRow(db: DbExecutor, listId: string): Promise<List | null> {
@@ -245,6 +246,7 @@ export async function toggleListLike(db: DbExecutor, userId: string, listId: str
   let liked: boolean;
   if (existing.length) {
     await db.delete(listLikes).where(and(eq(listLikes.listId, listId), eq(listLikes.userId, userId)));
+    await removeActivities(db, { userId, type: 'liked_list', listId });
     liked = false;
   } else {
     await db.insert(listLikes).values({ listId, userId }).onConflictDoNothing();

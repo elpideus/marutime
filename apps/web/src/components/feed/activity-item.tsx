@@ -79,7 +79,7 @@ function describe(item: FeedItem): ReactNode {
 export function ActivityItem({ item, className }: { item: FeedItem; className?: string }) {
   return (
     <li className={cn('flex items-start gap-3 py-3', className)}>
-      <Link href={`/u/${item.user.username}`} className="shrink-0">
+      <Link href={`/u/${item.user.username}`} data-nav-item className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
         <Avatar src={item.user.avatarUrl} name={item.user.displayName} size="sm" />
       </Link>
       <div className="min-w-0 flex-1 text-sm text-fg-muted">

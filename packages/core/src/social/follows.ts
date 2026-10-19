@@ -1,6 +1,6 @@
 import { and, count, desc, eq, inArray, publicUserColumns, userFollows, users, type DbExecutor, type PublicUser } from '@marutime/db';
 import { errors } from '../errors';
-import { recordActivity } from './activity';
+import { recordActivity, removeActivities } from './activity';
 import { createNotification } from './notifications';
 
 export async function followUser(db: DbExecutor, followerId: string, followeeId: string): Promise<void> {
@@ -15,6 +15,7 @@ export async function followUser(db: DbExecutor, followerId: string, followeeId:
 
 export async function unfollowUser(db: DbExecutor, followerId: string, followeeId: string): Promise<void> {
   await db.delete(userFollows).where(and(eq(userFollows.followerId, followerId), eq(userFollows.followeeId, followeeId)));
+  await removeActivities(db, { userId: followerId, type: 'followed_user', targetUserId: followeeId });
 }
 
 export async function getFollowers(db: DbExecutor, userId: string, limit = 50, offset = 0): Promise<PublicUser[]> {

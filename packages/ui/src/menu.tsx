@@ -1,37 +1,55 @@
 'use client';
 
 import { AnimatePresence, motion } from 'motion/react';
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from './cn';
-import { springs } from './motion';
+import { useFloating, useIsClient } from './floating';
+import { exitFast, springs } from './motion';
 
-type MenuContextValue = { open: boolean; setOpen: (v: boolean) => void; id: string };
+type MenuContextValue = {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  id: string;
+  anchorRef: RefObject<HTMLDivElement | null>;
+  contentRef: RefObject<HTMLDivElement | null>;
+  /** Focus the first item when the menu was opened from the keyboard. */
+  focusFirst: RefObject<boolean>;
+};
 const MenuContext = createContext<MenuContextValue | null>(null);
 
+const ITEM_SELECTOR = '[role="menuitem"]:not([disabled])';
+
 export function Menu({ children, className }: { children: ReactNode; className?: string }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
   const id = useId();
-  const ref = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const focusFirst = useRef(false);
+
+  const setOpen = useCallback((v: boolean) => {
+    setOpenState(v);
+    if (!v) focusFirst.current = false;
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent | TouchEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      const t = e.target as Node;
+      if (anchorRef.current?.contains(t) || contentRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('touchstart', onDown);
-    document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('touchstart', onDown);
-      document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, setOpen]);
+
   return (
-    <MenuContext.Provider value={{ open, setOpen, id }}>
-      <div ref={ref} className={cn('relative inline-block', className)}>
+    <MenuContext.Provider value={{ open, setOpen, id, anchorRef, contentRef, focusFirst }}>
+      <div ref={anchorRef} className={cn('relative inline-block', className)}>
         {children}
       </div>
     </MenuContext.Provider>
@@ -44,35 +62,97 @@ function useMenu(): MenuContextValue {
   return ctx;
 }
 
-export function MenuTrigger({ children }: { children: (props: { onClick: () => void; 'aria-expanded': boolean; 'aria-haspopup': 'menu'; 'aria-controls': string }) => ReactNode }) {
-  const { open, setOpen, id } = useMenu();
+type TriggerProps = {
+  onClick: () => void;
+  onKeyDown: (e: ReactKeyboardEvent) => void;
+  'aria-expanded': boolean;
+  'aria-haspopup': 'menu';
+  'aria-controls': string;
+};
+
+export function MenuTrigger({ children }: { children: (props: TriggerProps) => ReactNode }) {
+  const { open, setOpen, id, focusFirst } = useMenu();
   const onClick = useCallback(() => setOpen(!open), [open, setOpen]);
-  return <>{children({ onClick, 'aria-expanded': open, 'aria-haspopup': 'menu', 'aria-controls': id })}</>;
+  const onKeyDown = useCallback(
+    (e: ReactKeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusFirst.current = true;
+        setOpen(true);
+      }
+    },
+    [setOpen, focusFirst],
+  );
+  return <>{children({ onClick, onKeyDown, 'aria-expanded': open, 'aria-haspopup': 'menu', 'aria-controls': id })}</>;
 }
 
-export function MenuContent({ children, align = 'end', className }: { children: ReactNode; align?: 'start' | 'end'; className?: string }) {
-  const { open, id } = useMenu();
-  return (
+export function MenuContent({ children, align = 'end', side = 'bottom', className }: { children: ReactNode; align?: 'start' | 'end' | 'center'; side?: 'top' | 'bottom'; className?: string }) {
+  const { open, setOpen, id, anchorRef, contentRef, focusFirst } = useMenu();
+  const pos = useFloating(anchorRef, contentRef, { open, side, align, offset: 8 });
+  const isClient = useIsClient();
+
+  useEffect(() => {
+    if (!open || !pos.ready) return;
+    const items = contentRef.current?.querySelectorAll<HTMLElement>(ITEM_SELECTOR);
+    if (focusFirst.current) items?.[0]?.focus();
+    else contentRef.current?.focus({ preventScroll: true });
+  }, [open, pos.ready, contentRef, focusFirst]);
+
+  const close = (restore: boolean) => {
+    setOpen(false);
+    if (restore) anchorRef.current?.querySelector<HTMLElement>('[aria-haspopup="menu"]')?.focus();
+  };
+
+  const onKeyDown = (e: ReactKeyboardEvent) => {
+    const items = Array.from(contentRef.current?.querySelectorAll<HTMLElement>(ITEM_SELECTOR) ?? []);
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      items[(i + 1) % items.length]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      items[(i - 1 + items.length) % items.length]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      close(true);
+    } else if (e.key === 'Tab') {
+      close(false);
+    }
+  };
+
+  if (!isClient) return null;
+  return createPortal(
     <AnimatePresence>
       {open ? (
         <motion.div
+          ref={contentRef}
           id={id}
           role="menu"
-          initial={{ opacity: 0, scale: 0.94, y: -6 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.96, y: -4, transition: { duration: 0.12 } }}
+          tabIndex={-1}
+          onKeyDown={onKeyDown}
+          initial={{ opacity: 0, scale: 0.9, y: pos.side === 'top' ? 6 : -6 }}
+          animate={{ opacity: pos.ready ? 1 : 0, scale: pos.ready ? 1 : 0.9, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, transition: exitFast }}
           transition={springs.bouncy}
-          style={{ originY: 0, originX: align === 'end' ? 1 : 0 }}
-          className={cn('absolute z-40 mt-2 min-w-48 overflow-hidden rounded-[18px] border border-border bg-surface-2 p-1.5 shadow-2xl', align === 'end' ? 'right-0' : 'left-0', className)}
+          style={{ ...pos.style, transformOrigin: pos.origin }}
+          className={cn('z-[70] min-w-48 overflow-y-auto rounded-[16px] border border-border-strong bg-surface-2/95 p-1.5 shadow-float outline-none backdrop-blur-xl', className)}
         >
           {children}
         </motion.div>
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 
-export function MenuItem({ children, onSelect, destructive, disabled, className, icon }: { children: ReactNode; onSelect?: () => void; destructive?: boolean; disabled?: boolean; className?: string; icon?: ReactNode }) {
+export function MenuItem({ children, onSelect, destructive, disabled, className, icon, shortcut, active }: { children: ReactNode; onSelect?: () => void; destructive?: boolean; disabled?: boolean; className?: string; icon?: ReactNode; shortcut?: ReactNode; active?: boolean }) {
   const { setOpen } = useMenu();
   return (
     <button
@@ -84,13 +164,15 @@ export function MenuItem({ children, onSelect, destructive, disabled, className,
         setOpen(false);
       }}
       className={cn(
-        'flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2 text-left text-sm outline-none transition-colors focus-visible:bg-surface-3 disabled:opacity-50',
-        destructive ? 'text-danger hover:bg-danger/10' : 'text-fg hover:bg-surface-3',
+        'flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-sm outline-none transition-colors duration-150 focus-visible:bg-surface-3 disabled:opacity-50',
+        destructive ? 'text-danger hover:bg-danger/10 focus-visible:bg-danger/10' : 'text-fg hover:bg-surface-3',
+        active && 'text-accent',
         className,
       )}
     >
-      {icon ? <span className="text-fg-muted [&>svg]:size-4">{icon}</span> : null}
-      {children}
+      {icon ? <span className={cn('[&>svg]:size-4', destructive ? 'text-danger' : active ? 'text-accent' : 'text-fg-muted')}>{icon}</span> : null}
+      <span className="min-w-0 flex-1">{children}</span>
+      {shortcut ? <span className="ml-3 text-[11px] text-fg-subtle">{shortcut}</span> : null}
     </button>
   );
 }

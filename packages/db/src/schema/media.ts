@@ -134,6 +134,9 @@ export const characters = pgTable(
     nativeName: text('native_name'),
     actorName: text('actor_name'),
     profilePath: text('profile_path'),
+    /** AniList staff id and portrait of the voice actor (AniList rows only). */
+    voiceActorId: integer('voice_actor_id'),
+    voiceActorImageUrl: text('voice_actor_image_url'),
     imageUrl: text('image_url'),
     role: text('role'),
     sortOrder: integer('sort_order').notNull().default(0),

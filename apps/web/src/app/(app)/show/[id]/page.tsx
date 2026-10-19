@@ -1,19 +1,22 @@
-import { getActiveDevices, getActiveServices, getAnimeDetails, getCharactersForMedia, getComments, getEpisodesForMedia, getListsContainingMedia, getSeasons, getShowProgress, getShowStats, getTracking, getUserEpisodeWatchMap, toPublicUser } from '@marutime/core';
-import { episodeHref, mediaHref } from '@marutime/core/media';
-import { getDb, type Watch } from '@marutime/db';
-import { Button, Island, IslandHeader, ProgressRing } from '@marutime/ui';
+import { getComments, getEpisodeWatchCounts, getListsContainingMedia, getShowProgress, getShowStats, getTracking, toPublicUser } from '@marutime/core';
+import { mediaHref } from '@marutime/core/media';
+import { getDb } from '@marutime/db';
+import { Button, Island, IslandHeader } from '@marutime/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CommentFeed } from '@/components/comments/comment-feed';
+import { RememberTitle } from '@/components/keyboard/command-palette';
 import { ListCard } from '@/components/lists/list-card';
 import { CastStrip } from '@/components/media/cast-strip';
+import { toCastMember } from '@/lib/cast';
 import { AddToListButton, BulkMarkMenu, TrackButton, WatchlistButton } from '@/components/media/media-actions';
 import { MediaHero } from '@/components/media/media-hero';
-import { SeasonBrowser } from '@/components/media/season-browser';
+import { SeasonBrowser, type SeasonTab } from '@/components/media/season-browser';
+import { ShowProgressCard } from '@/components/media/show-progress';
 import { StatsIsland } from '@/components/tracking/stats-island';
-import { WatchedButton } from '@/components/tracking/watched-button';
-import { episodeCode, formatDate } from '@/lib/format';
-import { loadMedia, loadViewerMediaState } from '@/lib/media-page';
+import { formatDate } from '@/lib/format';
+import { loadAnime, loadCharacters, loadEpisodesPage, loadMedia, loadSeasonCounts, loadSeasons, loadViewerMediaState } from '@/lib/media-page';
+import { renderedAt } from '@/lib/clock';
 import { getCurrentUser, isStaff } from '@/lib/session';
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ season?: string }> };
@@ -28,84 +31,65 @@ export default async function ShowPage({ params, searchParams }: Props) {
   const media = await loadMedia('show', id);
   const db = getDb();
   const user = await getCurrentUser();
-  const [seasons, episodes, characters, anime, stats, comments, lists, devices, services, progress, tracking, viewerState] = await Promise.all([
-    getSeasons(db, media.id),
-    getEpisodesForMedia(db, media.id),
-    getCharactersForMedia(db, media.id, { limit: 40 }),
-    media.isAnime ? getAnimeDetails(db, media.id) : Promise.resolve(null),
+  const serverAt = renderedAt();
+  const [seasons, seasonCounts, characters, anime, stats, comments, lists, progress, tracking, viewerState, watched] = await Promise.all([
+    loadSeasons(media),
+    loadSeasonCounts(media),
+    loadCharacters(media, 40),
+    loadAnime(media),
     getShowStats(db, media.id),
     getComments(db, { mediaId: media.id }, { viewer: user, limit: 20 }),
     getListsContainingMedia(db, media.id, user?.id ?? null),
-    getActiveDevices(db),
-    getActiveServices(db),
     getShowProgress(db, user?.id ?? null, media.id),
     user ? getTracking(db, user.id, media.id) : Promise.resolve(null),
     loadViewerMediaState(user, media.id),
+    user ? getEpisodeWatchCounts(db, user.id, media.id) : Promise.resolve([]),
   ]);
-  const watchMapEntries = user ? await getUserEpisodeWatchMap(db, user.id, media.id) : new Map<number, Watch[]>();
-  const watchMap: Record<number, Array<{ id: string; deviceId: number | null; serviceId: number | null; emotions: string[]; favoriteCharacterId: number | null; note: string | null }>> = {};
-  for (const [episodeId, watches] of watchMapEntries) {
-    watchMap[episodeId] = watches.map((w) => ({ id: w.id, deviceId: w.deviceId, serviceId: w.serviceId, emotions: w.emotions, favoriteCharacterId: w.favoriteCharacterId, note: w.note }));
-  }
-  const regularSeasons = seasons.filter((s) => s.seasonNumber > 0).map((s) => s.seasonNumber);
+  const counts = new Map(seasonCounts.map((c) => [c.seasonNumber, c]));
+  const tabs: SeasonTab[] = seasons
+    .map((s) => ({ seasonNumber: s.seasonNumber, name: s.name, total: counts.get(s.seasonNumber)?.total ?? s.episodeCount, aired: counts.get(s.seasonNumber)?.aired ?? 0 }))
+    .filter((s) => s.total > 0 || s.seasonNumber > 0);
+  const regularSeasons = tabs.filter((s) => s.seasonNumber > 0).map((s) => s.seasonNumber);
   const requestedSeason = Number(sp.season);
-  const initialSeason = seasons.some((s) => s.seasonNumber === requestedSeason) ? requestedSeason : progress.nextEpisode?.seasonNumber ?? regularSeasons[0] ?? seasons[0]?.seasonNumber ?? 1;
-  const defaults = user ? { deviceId: user.preferences.defaultDeviceId ?? null, serviceId: user.preferences.defaultServiceId ?? null } : undefined;
-  const next = progress.nextEpisode;
+  const initialSeason = tabs.some((s) => s.seasonNumber === requestedSeason) ? requestedSeason : progress.nextEpisode?.seasonNumber ?? regularSeasons[0] ?? tabs[0]?.seasonNumber ?? 1;
+  const firstPage = await loadEpisodesPage(media, initialSeason, 0, 40);
+  const pick = (e: { id: number; seasonNumber: number; episodeNumber: number; name: string | null; airDate: string | null }) => ({ id: e.id, seasonNumber: e.seasonNumber, episodeNumber: e.episodeNumber, name: e.name, airDate: e.airDate });
+  const checkInCharacters = characters.map((c) => ({ id: c.id, name: c.name, imageUrl: c.imageUrl, profilePath: c.profilePath }));
+  const totalEpisodes = tabs.filter((s) => s.seasonNumber > 0).reduce((n, s) => n + s.total, 0);
 
   return (
     <div className="flex flex-col gap-6">
+      <RememberTitle href={mediaHref(media)} title={media.title} posterPath={media.posterPath} type={media.type} isAnime={media.isAnime} />
       <MediaHero
         media={media}
         anime={anime}
+        autoplayTrailer={user?.preferences.autoplayTrailers !== false}
         actions={
           <>
             <TrackButton mediaId={media.id} tracking={tracking} signedIn={Boolean(user)} />
-            <WatchlistButton mediaId={media.id} inList={viewerState.inWatchlist} signedIn={Boolean(user)} />
+            <WatchlistButton mediaId={media.id} inList={viewerState.inWatchlist} signedIn={Boolean(user)} primary />
             <AddToListButton mediaId={media.id} lists={viewerState.lists} signedIn={Boolean(user)} />
-            {user && regularSeasons.length ? <BulkMarkMenu mediaId={media.id} seasons={regularSeasons} /> : null}
+            {user && regularSeasons.length ? <BulkMarkMenu media={{ id: media.id, title: media.title }} seasons={regularSeasons} /> : null}
           </>
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
           {user ? (
-            <Island className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <ProgressRing value={progress.percent} size={64} stroke={6} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-fg-muted">
-                  {progress.watchedEpisodes} of {progress.airedEpisodes} aired episodes
-                  {progress.remaining > 0 ? ` · ${progress.remaining} to go` : progress.isTracked ? ' · you are up to date' : ''}
-                </p>
-                {next ? (
-                  <Link href={episodeHref(media, next.seasonNumber, next.episodeNumber)} className="mt-0.5 block truncate text-lg font-semibold text-fg hover:text-accent">
-                    Next up: <span className="text-accent">{episodeCode(next.seasonNumber, next.episodeNumber)}</span> {next.name ?? ''}
-                  </Link>
-                ) : progress.upcomingEpisode ? (
-                  <p className="mt-0.5 text-lg font-semibold text-fg">
-                    {episodeCode(progress.upcomingEpisode.seasonNumber, progress.upcomingEpisode.episodeNumber)} airs {formatDate(progress.upcomingEpisode.airDate)}
-                  </p>
-                ) : (
-                  <p className="mt-0.5 text-lg font-semibold text-fg">All caught up</p>
-                )}
-              </div>
-              {next ? (
-                <WatchedButton
-                  target={{ kind: 'episode', episodeId: next.id, label: `${media.title} · ${episodeCode(next.seasonNumber, next.episodeNumber)}` }}
-                  watched={false}
-                  devices={devices}
-                  services={services}
-                  characters={characters}
-                  defaults={defaults}
-                  signedIn
-                  variant="compact"
-                />
-              ) : null}
-            </Island>
+            <ShowProgressCard
+              media={{ id: media.id, externalId: media.externalId, slug: media.slug, title: media.title }}
+              aired={progress.airedEpisodes}
+              tracked={progress.isTracked}
+              watched={watched}
+              serverAt={serverAt}
+              next={progress.nextEpisode ? pick(progress.nextEpisode) : null}
+              upcoming={progress.upcomingEpisode ? pick(progress.upcomingEpisode) : null}
+              characters={checkInCharacters}
+            />
           ) : null}
 
-          {media.overview || anime?.description ? (
+      {media.overview || anime?.description ? (
             <Island>
               <IslandHeader title="About" />
               <p className="text-sm leading-relaxed text-fg-muted whitespace-pre-line">{media.overview ?? anime?.description}</p>
@@ -123,8 +107,18 @@ export default async function ShowPage({ params, searchParams }: Props) {
           ) : null}
 
           <Island>
-            <IslandHeader title="Episodes" description={`${media.episodeCount ?? episodes.length} episodes across ${regularSeasons.length} ${regularSeasons.length === 1 ? 'season' : 'seasons'}`} />
-            <SeasonBrowser media={media} seasons={seasons} episodes={episodes} watchMap={watchMap} initialSeason={initialSeason} devices={devices} services={services} characters={characters} signedIn={Boolean(user)} defaults={defaults} />
+            <IslandHeader title="Episodes" description={`${totalEpisodes || media.episodeCount || 0} episodes across ${regularSeasons.length} ${regularSeasons.length === 1 ? 'season' : 'seasons'}`} />
+            <SeasonBrowser
+              media={{ id: media.id, externalId: media.externalId, slug: media.slug, title: media.title }}
+              seasons={tabs}
+              initialSeason={initialSeason}
+              initialEpisodes={firstPage.items.map((e) => ({ id: e.id, seasonNumber: e.seasonNumber, episodeNumber: e.episodeNumber, name: e.name, overview: e.overview, stillPath: e.stillPath, airDate: e.airDate, runtime: e.runtime, voteAverage: e.voteAverage }))}
+              initialTotal={firstPage.total}
+              watched={watched}
+              serverAt={serverAt}
+              signedIn={Boolean(user)}
+              characters={checkInCharacters}
+            />
           </Island>
 
           <CommentFeed target={{ mediaId: media.id }} initial={comments.items} total={comments.total} viewer={user ? toPublicUser(user) : null} viewerIsStaff={isStaff(user)} hideSpoilersByDefault={user?.preferences.hideSpoilersByDefault ?? true} />
@@ -132,7 +126,7 @@ export default async function ShowPage({ params, searchParams }: Props) {
 
         <div className="flex flex-col gap-6">
           <StatsIsland stats={stats} title="How viewers felt" />
-          <CastStrip characters={characters} />
+          <CastStrip members={characters.map(toCastMember)} title={media.isAnime ? 'Characters' : 'Cast'} mediaAnilistId={anime?.anilistId} />
           {lists.length > 0 ? (
             <Island>
               <IslandHeader title="Appears in lists" action={<Link href="/lists" className="text-sm text-accent hover:underline">Browse</Link>} />

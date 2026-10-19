@@ -9,7 +9,7 @@ export * from './images';
 export { TmdbProvider } from './tmdb/provider';
 export { TmdbClient } from './tmdb/client';
 export { FixtureProvider } from './fixture/provider';
-export { AniListClient, type AnimeEnrichment, type AnimeCharacter } from './anilist/client';
+export { AniListClient, type AnimeEnrichment, type AnimeCharacter, type AniListCharacterDetails, type AniListStaffDetails, type AniListMediaRef, type AniListVoiceActor } from './anilist/client';
 
 type GlobalWithProvider = typeof globalThis & { __marutimeMetadata?: MetadataProvider };
 

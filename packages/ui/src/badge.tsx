@@ -1,7 +1,7 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from './cn';
 
-export type BadgeTone = 'neutral' | 'accent' | 'success' | 'danger' | 'info' | 'outline';
+export type BadgeTone = 'neutral' | 'accent' | 'success' | 'danger' | 'info' | 'outline' | 'show' | 'movie' | 'anime';
 
 const tones: Record<BadgeTone, string> = {
   neutral: 'bg-surface-3 text-fg-muted',
@@ -10,6 +10,9 @@ const tones: Record<BadgeTone, string> = {
   danger: 'bg-danger/15 text-danger',
   info: 'bg-info/15 text-info',
   outline: 'border border-border text-fg-muted',
+  show: 'bg-show/15 text-show ring-1 ring-inset ring-show/25',
+  movie: 'bg-movie/15 text-movie ring-1 ring-inset ring-movie/25',
+  anime: 'bg-anime/15 text-anime ring-1 ring-inset ring-anime/25',
 };
 
 export function Badge({ tone = 'neutral', className, children, ...rest }: HTMLAttributes<HTMLSpanElement> & { tone?: BadgeTone; children: ReactNode }) {

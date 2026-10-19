@@ -13,10 +13,11 @@ export const metadata: Metadata = { title: 'Search' };
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string; type?: string; page?: string }> }) {
   const sp = await searchParams;
   const q = sp.q?.trim() ?? '';
-  const type = sp.type === 'show' || sp.type === 'movie' ? sp.type : 'all';
+  const type = sp.type === 'show' || sp.type === 'movie' || sp.type === 'anime' ? sp.type : 'all';
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
-  const result = q ? await searchMedia(q, { type, page }).catch(() => null) : null;
-  const items = result?.results.map(cardFromSummary) ?? [];
+  // TMDB cannot filter anime; search everything and keep the anime.
+  const result = q ? await searchMedia(q, { type: type === 'anime' ? 'all' : type, page }).catch(() => null) : null;
+  const items = (type === 'anime' ? result?.results.filter((r) => r.isAnime) : result?.results)?.map(cardFromSummary) ?? [];
   const qs = (p: number) => `/search?q=${encodeURIComponent(q)}&type=${type}&page=${p}`;
   return (
     <div className="flex flex-col gap-6">

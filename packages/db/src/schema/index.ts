@@ -6,3 +6,4 @@ export * from './tracking';
 export * from './lists';
 export * from './social';
 export * from './platform';
+export * from './cache';

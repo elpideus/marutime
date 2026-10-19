@@ -24,6 +24,10 @@ export type UserPreferences = {
   emailNotifications?: boolean;
   defaultDeviceId?: number | null;
   defaultServiceId?: number | null;
+  /** Play trailers silently in the background of title pages (desktop). Default on. */
+  autoplayTrailers?: boolean;
+  /** Custom keyboard shortcuts: action id → key sequence; null disables a shortcut. */
+  keybindings?: Record<string, string | null>;
 };
 
 export const users = pgTable(

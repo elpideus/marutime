@@ -52,7 +52,7 @@ export default async function MyShowsPage({ searchParams }: { searchParams: Prom
                   </Link>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <Link href={mediaHref(l.media)} className="truncate text-sm font-semibold text-fg hover:text-accent">{l.media.title}</Link>
+                      <Link href={mediaHref(l.media)} data-nav-item className="truncate rounded-[6px] text-sm font-semibold text-fg outline-none hover:text-accent focus-visible:ring-2 focus-visible:ring-accent/70">{l.media.title}</Link>
                       {l.tracking.isFavorite ? <Star className="size-4 shrink-0 fill-accent text-accent" /> : null}
                     </div>
                     <p className="mt-0.5 text-xs text-fg-muted">

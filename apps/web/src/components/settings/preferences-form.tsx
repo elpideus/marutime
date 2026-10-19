@@ -52,6 +52,9 @@ export function PreferencesForm({ preferences, devices, services }: { preference
       <Row title="Hide spoilers by default" text="Blur spoiler-marked comments until you tap them.">
         <Switch checked={prefs.hideSpoilersByDefault !== false} onCheckedChange={(v) => update({ hideSpoilersByDefault: v })} label="Hide spoilers" />
       </Row>
+      <Row title="Play trailers in the background" text="On large screens, title pages quietly play the trailer behind the cover. Trailers are embedded from YouTube's privacy-enhanced (no-cookie) player.">
+        <Switch checked={prefs.autoplayTrailers !== false} onCheckedChange={(v) => update({ autoplayTrailers: v })} label="Play trailers in the background" />
+      </Row>
       <Row title="Theme" text="Dark is the default. Light is here if you insist.">
         <Select value={prefs.theme ?? 'dark'} onChange={(e) => update({ theme: e.target.value as UserPreferences['theme'] })} className="w-40">
           <option value="dark">Dark</option>

@@ -1,17 +1,20 @@
 import type { AnimeDetails, Media } from '@marutime/db';
 import { img } from '@marutime/metadata/images';
 import { Badge } from '@marutime/ui';
-import { ExternalLink, Play, Star } from 'lucide-react';
+import { ExternalLink, Star } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Backdrop, Poster } from '@/components/media/poster';
 import { formatRuntime, yearOf } from '@/lib/format';
+import { TrailerBackdrop, TrailerButtons, TrailerProvider } from './hero-trailer';
+import { TypeBadge } from './type-badge';
 
-export function MediaHero({ media, anime, actions, meta }: { media: Media; anime: AnimeDetails | null; actions: ReactNode; meta?: ReactNode }) {
+export function MediaHero({ media, anime, actions, meta, autoplayTrailer = true }: { media: Media; anime: AnimeDetails | null; actions: ReactNode; meta?: ReactNode; autoplayTrailer?: boolean }) {
   const backdrop = anime?.bannerImageUrl ?? img.backdrop(media.backdropPath, 'w1280');
-  return (
+  const hero = (
     <section className="relative -mx-4 -mt-6 overflow-hidden sm:-mx-6 sm:rounded-b-island">
       <div className="absolute inset-0">
         {backdrop ? <img src={backdrop} alt="" className="size-full object-cover opacity-60" loading="eager" decoding="async" /> : <Backdrop path={null} className="size-full" />}
+        {media.trailerKey ? <TrailerBackdrop /> : null}
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/85 to-bg/30" />
         <div className="absolute inset-0 bg-gradient-to-r from-bg/70 to-transparent" />
       </div>
@@ -22,7 +25,7 @@ export function MediaHero({ media, anime, actions, meta }: { media: Media; anime
           </div>
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <Badge tone={media.isAnime ? 'accent' : 'neutral'}>{media.isAnime ? 'Anime' : media.type === 'show' ? 'Show' : 'Movie'}</Badge>
+              <TypeBadge type={media.type} isAnime={media.isAnime} />
               {media.status ? <Badge tone="outline">{media.status}</Badge> : null}
               {media.certification ? <Badge tone="outline">{media.certification}</Badge> : null}
             </div>
@@ -61,15 +64,18 @@ export function MediaHero({ media, anime, actions, meta }: { media: Media; anime
             {meta}
             <div className="mt-5 flex flex-wrap items-center gap-2">
               {actions}
-              {media.trailerKey ? (
-                <a href={`https://www.youtube.com/watch?v=${media.trailerKey}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-control px-3 text-sm font-medium text-fg-muted hover:bg-surface-2 hover:text-fg">
-                  <Play className="size-4" /> Trailer
-                </a>
-              ) : null}
+              {media.trailerKey ? <TrailerButtons /> : null}
             </div>
           </div>
         </div>
       </div>
     </section>
+  );
+  return media.trailerKey ? (
+    <TrailerProvider trailerKey={media.trailerKey} title={media.title} autoplay={autoplayTrailer}>
+      {hero}
+    </TrailerProvider>
+  ) : (
+    hero
   );
 }

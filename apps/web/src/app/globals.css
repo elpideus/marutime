@@ -24,14 +24,18 @@
   --color-danger: var(--mt-danger);
   --color-success: var(--mt-success);
   --color-info: var(--mt-info);
+  /* Content types: every show, movie and anime badge uses these. */
+  --color-show: var(--mt-type-show);
+  --color-movie: var(--mt-type-movie);
+  --color-anime: var(--mt-type-anime);
 
-  --radius-island: 24px;
-  --radius-card: 18px;
-  --radius-control: 14px;
+  --radius-island: 22px;
+  --radius-card: 16px;
+  --radius-control: 12px;
   --radius-pill: 999px;
 
   --shadow-island: var(--mt-shadow-island);
-  --shadow-float: 0 24px 60px -24px rgb(0 0 0 / 0.7);
+  --shadow-float: var(--mt-shadow-float);
 
   --animate-shimmer: shimmer 1.6s linear infinite;
   @keyframes shimmer {
@@ -40,42 +44,65 @@
   }
 }
 
+/*
+ * Motion curves (a separate, non-inline theme block so they also exist as
+ * real custom properties for hand-written CSS and view transitions).
+ */
+@theme static {
+  /*
+   * Spring curves sampled from a damped oscillator so CSS transitions move
+   * like the motion springs: a quick settle with a small, clean overshoot.
+   */
+  --ease-spring: linear(0, 0.0256, 0.0909, 0.1811, 0.2847, 0.3926, 0.4984, 0.5976, 0.6873, 0.7659, 0.833, 0.8885, 0.9332, 0.9681, 0.9943, 1.0132, 1.0259, 1.0336, 1.0375, 1.0384, 1.0372, 1.0345, 1.031, 1.027, 1.0228, 1.0188, 1.015, 1.0116, 1.0086, 1.0061, 1.004, 1.0024, 1.0011, 1.0001, 0.9994, 0.999, 0.9987, 0.9986, 0.9985, 0.9986, 1);
+  --ease-bounce: linear(0, 0.0437, 0.1537, 0.3016, 0.464, 0.6233, 0.7673, 0.8884, 0.9834, 1.052, 1.0963, 1.1197, 1.1263, 1.1206, 1.1066, 1.0878, 1.0673, 1.0472, 1.0291, 1.0138, 1.0019, 0.9933, 0.9878, 0.9848, 0.984, 0.9848, 0.9866, 0.989, 0.9916, 0.9941, 0.9964, 0.9983, 0.9998, 1.0009, 1.0016, 1.0019, 1.002, 1.0019, 1.0017, 1.0014, 1);
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+
+}
+
+/*
+ * Dark (default): neutral greys in the spirit of Windows 11's dark surfaces.
+ * No blue tint; depth comes from small steps in lightness and hairlines.
+ */
 :root {
   color-scheme: dark;
-  --mt-bg: #09090b;
-  --mt-bg-elevated: #0e0e11;
-  --mt-surface: #131316;
-  --mt-surface-2: #1a1a1e;
-  --mt-surface-3: #232328;
-  --mt-border: rgb(255 255 255 / 0.08);
-  --mt-border-strong: rgb(255 255 255 / 0.16);
-  --mt-fg: #f5f5f7;
-  --mt-fg-muted: #a1a1aa;
-  --mt-fg-subtle: #6e6e78;
+  --mt-bg: #171717;
+  --mt-bg-elevated: #1b1b1b;
+  --mt-surface: #1f1f1f;
+  --mt-surface-2: #272727;
+  --mt-surface-3: #303030;
+  --mt-border: rgb(255 255 255 / 0.07);
+  --mt-border-strong: rgb(255 255 255 / 0.13);
+  --mt-fg: #f3f3f3;
+  --mt-fg-muted: #a6a6a6;
+  --mt-fg-subtle: #737373;
   --mt-accent: #ffd233;
   --mt-accent-strong: #ffc400;
-  --mt-accent-soft: rgb(255 210 51 / 0.14);
-  --mt-accent-glow: rgb(255 210 51 / 0.45);
+  --mt-accent-soft: rgb(255 210 51 / 0.13);
+  --mt-accent-glow: rgb(255 210 51 / 0.4);
   --mt-on-accent: #1a1400;
   --mt-danger: #ff6b6b;
   --mt-success: #4ade80;
   --mt-info: #7dd3fc;
-  --mt-shadow-island: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 18px 40px -28px rgb(0 0 0 / 0.9);
-  --mt-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --mt-type-show: #6cb2ff;
+  --mt-type-movie: #c49bff;
+  --mt-type-anime: #ffc53d;
+  --mt-shadow-island: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 1px 2px rgb(0 0 0 / 0.25), 0 16px 36px -26px rgb(0 0 0 / 0.85);
+  --mt-shadow-float: 0 0 0 1px rgb(255 255 255 / 0.06), 0 24px 60px -18px rgb(0 0 0 / 0.75), 0 8px 20px -12px rgb(0 0 0 / 0.6);
+  --mt-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a6a6a6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 [data-theme='light'] {
   color-scheme: light;
-  --mt-bg: #f6f6f4;
-  --mt-bg-elevated: #ffffff;
-  --mt-surface: #ffffff;
-  --mt-surface-2: #f1f1ee;
-  --mt-surface-3: #e6e6e1;
+  --mt-bg: #f3f3f3;
+  --mt-bg-elevated: #f9f9f9;
+  --mt-surface: #fdfdfd;
+  --mt-surface-2: #f5f5f5;
+  --mt-surface-3: #e9e9e9;
   --mt-border: rgb(0 0 0 / 0.08);
-  --mt-border-strong: rgb(0 0 0 / 0.16);
-  --mt-fg: #15151a;
-  --mt-fg-muted: #5c5c66;
-  --mt-fg-subtle: #8a8a94;
+  --mt-border-strong: rgb(0 0 0 / 0.15);
+  --mt-fg: #1a1a1a;
+  --mt-fg-muted: #5d5d5d;
+  --mt-fg-subtle: #8a8a8a;
   --mt-accent: #f2b705;
   --mt-accent-strong: #dba600;
   --mt-accent-soft: rgb(242 183 5 / 0.16);
@@ -84,8 +111,12 @@
   --mt-danger: #d93636;
   --mt-success: #1f9d55;
   --mt-info: #0369a1;
-  --mt-shadow-island: 0 1px 2px rgb(0 0 0 / 0.04), 0 18px 40px -30px rgb(0 0 0 / 0.25);
-  --mt-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235c5c66' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --mt-type-show: #1f6fd1;
+  --mt-type-movie: #8a3fe0;
+  --mt-type-anime: #b7791f;
+  --mt-shadow-island: 0 1px 2px rgb(0 0 0 / 0.05), 0 16px 36px -30px rgb(0 0 0 / 0.25);
+  --mt-shadow-float: 0 0 0 1px rgb(0 0 0 / 0.06), 0 24px 60px -24px rgb(0 0 0 / 0.3);
+  --mt-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235d5d5d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 @layer base {
@@ -112,9 +143,39 @@
   input::-webkit-search-cancel-button {
     display: none;
   }
+  /*
+   * Tailwind v4 resets buttons to the default arrow. Everything a person can
+   * click shows a pointer, including ARIA widgets built from plain elements.
+   */
+  a[href],
+  button:not(:disabled),
+  summary,
+  select:not(:disabled),
+  label[for],
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  input[type='file']:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab'],
+  [role='menuitem'],
+  [role='option'],
+  [role='switch'],
+  [data-clickable] {
+    cursor: pointer;
+  }
+  :disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
   @media (prefers-reduced-motion: reduce) {
     html {
       scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
     }
   }
   * {
@@ -144,4 +205,141 @@
   filter: blur(8px);
   user-select: none;
   transition: filter 0.3s ease;
+}
+
+/*
+ * Arrow nudges for calls to action: any element with `cta-arrow` moves its
+ * last svg on hover/focus with a springy overshoot, and back again.
+ */
+@utility cta-arrow {
+  & > svg:last-child {
+    transition: transform 0.6s var(--ease-bounce);
+  }
+  &:hover > svg:last-child,
+  &:focus-visible > svg:last-child,
+  :where(a:hover, a:focus-visible) > & > svg:last-child {
+    transform: translateX(4px);
+  }
+  &:active > svg:last-child {
+    transform: translateX(7px);
+    transition-duration: 0.2s;
+  }
+}
+
+/* Smooth springy hover lift for cards built without motion components. */
+@utility lift {
+  transition: transform 0.6s var(--ease-spring), box-shadow 0.3s var(--ease-smooth);
+  &:hover {
+    transform: translateY(-3px);
+  }
+  &:active {
+    transform: translateY(-1px) scale(0.99);
+    transition-duration: 0.15s;
+  }
+}
+
+/* ───────────────────────── View transitions ─────────────────────────
+ * Named elements animate; everything else swaps instantly underneath, so
+ * the page never cross-fades as a whole. Clicks pass through the overlay.
+ */
+::view-transition {
+  pointer-events: none;
+}
+::view-transition-old(root) {
+  display: none;
+}
+::view-transition-new(root) {
+  animation: none;
+}
+
+/* Episode stills morph between peek and hero on an elastic curve. */
+::view-transition-group(.ep-morph) {
+  animation-duration: 720ms;
+  animation-timing-function: var(--ease-spring);
+}
+/* Snapshots are cover-scaled mid-morph (a thin peek becomes the wide hero), which paints outside the box unless clipped here. */
+::view-transition-image-pair(.ep-morph) {
+  isolation: isolate;
+  overflow: clip;
+  border-radius: 22px; /* rounded-island */
+}
+::view-transition-old(.ep-morph),
+::view-transition-new(.ep-morph) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: 360ms;
+  animation-timing-function: var(--ease-smooth);
+}
+
+/* Episode details slide with the direction of travel. */
+::view-transition-old(.ep-exit-to-left) {
+  animation: 160ms var(--ease-smooth) both mt-vt-fade-out, 520ms var(--ease-spring) both mt-vt-to-left;
+}
+::view-transition-old(.ep-exit-to-right) {
+  animation: 160ms var(--ease-smooth) both mt-vt-fade-out, 520ms var(--ease-spring) both mt-vt-to-right;
+}
+::view-transition-new(.ep-enter-from-right) {
+  animation: 240ms var(--ease-smooth) 90ms both mt-vt-fade-in, 680ms var(--ease-spring) both mt-vt-from-right;
+}
+::view-transition-new(.ep-enter-from-left) {
+  animation: 240ms var(--ease-smooth) 90ms both mt-vt-fade-in, 680ms var(--ease-spring) both mt-vt-from-left;
+}
+
+@keyframes mt-vt-fade-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+@keyframes mt-vt-fade-out {
+  to {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+@keyframes mt-vt-to-left {
+  to {
+    translate: -72px 0;
+  }
+}
+@keyframes mt-vt-to-right {
+  to {
+    translate: 72px 0;
+  }
+}
+@keyframes mt-vt-from-right {
+  from {
+    translate: 96px 0;
+  }
+}
+@keyframes mt-vt-from-left {
+  from {
+    translate: -96px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}
+
+/* Page entrance used by app/(app)/template.tsx. */
+@keyframes mt-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(3px);
+  }
+}
+.page-enter {
+  animation: mt-page-in 560ms var(--ease-spring) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
 }

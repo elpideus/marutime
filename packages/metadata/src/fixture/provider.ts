@@ -1,7 +1,11 @@
 import type {
   CastMember,
   DiscoverCategory,
+  DiscoverFilters,
   DiscoverSort,
+  Genre,
+  PersonDetails,
+  SeasonSelection,
   MediaSummary,
   MediaType,
   MetadataProvider,
@@ -77,7 +81,7 @@ const SHOWS: ShowDetails[] = [
     voteAverage: 8.2,
     voteCount: 1200,
     homepage: null,
-    trailerKey: null,
+    trailerKey: 'aqz-KE-bpKQ',
     certification: 'TV-14',
     cast: cast([
       ['June Calder', 'Mara Quinn'],
@@ -136,6 +140,59 @@ const SHOWS: ShowDetails[] = [
     seasonDetails: [
       { externalId: 21, seasonNumber: 1, name: 'Season 1', overview: null, posterPath: null, airDate: '2025-04-05', episodeCount: 12, episodes: episodes(1, 12, '2025-04-05', 2100).map((e) => ({ ...e, runtime: 24 })) },
     ],
+  },
+  {
+    type: 'show',
+    provider: 'fixture',
+    externalId: 3,
+    imdbId: null,
+    tvdbId: null,
+    title: 'Endless Tide',
+    originalTitle: '終わらない潮',
+    slug: slugify('Endless Tide'),
+    overview: 'A crew of misfits sails an ocean that never ends, one island and one episode at a time.',
+    tagline: 'The horizon keeps moving.',
+    posterPath: null,
+    backdropPath: null,
+    releaseDate: '2018-01-07',
+    lastAirDate: '2026-10-11',
+    nextEpisodeAirDate: '2026-10-25',
+    status: 'Returning Series',
+    genres: [{ id: 16, name: 'Animation' }, { id: 10759, name: 'Action & Adventure' }, { id: 35, name: 'Comedy' }],
+    networks: [{ id: 2, name: 'Fixture Anime', logoPath: null }],
+    originCountries: ['JP'],
+    originalLanguage: 'ja',
+    isAnime: true,
+    popularity: 880,
+    voteAverage: 8.6,
+    voteCount: 4200,
+    homepage: null,
+    trailerKey: null,
+    certification: 'TV-14',
+    cast: cast([
+      ['Captain Mio', 'Sora Aikawa'],
+      ['Navigator Tetsu', 'Daichi Mori'],
+      ['Cook Benji', 'Akira Fujii'],
+      ['Doctor Ume', 'Mei Hoshino'],
+      ['Shipwright Gan', 'Ryo Kuroda'],
+      ['Sniper Kiko', 'Nana Ueda'],
+      ['Archaeologist Rei', 'Emi Sakurai'],
+      ['Swordsman Jin', 'Takumi Oda'],
+      ['Musician Bones', 'Hiro Yamada'],
+      ['Helmsman Kai', 'Jun Nishida'],
+    ], 6000),
+    episodeRuntime: 24,
+    seasonCount: 3,
+    episodeCount: 450,
+    seasons: [
+      { externalId: 31, seasonNumber: 1, name: 'East Sea', overview: null, posterPath: null, airDate: '2018-01-07', episodeCount: 150 },
+      { externalId: 32, seasonNumber: 2, name: 'Grand Current', overview: null, posterPath: null, airDate: '2020-11-29', episodeCount: 150 },
+      { externalId: 33, seasonNumber: 3, name: 'New World', overview: null, posterPath: null, airDate: '2023-10-22', episodeCount: 150 },
+    ],
+    seasonDetails: [1, 2, 3].map((n) => {
+      const start = ['2018-01-07', '2020-11-29', '2023-10-22'][n - 1]!;
+      return { externalId: 30 + n, seasonNumber: n, name: ['East Sea', 'Grand Current', 'New World'][n - 1]!, overview: null, posterPath: null, airDate: start, episodeCount: 150, episodes: episodes(n, 150, start, 30000 + n * 1000).map((e) => ({ ...e, runtime: 24 })) };
+    }),
   },
 ];
 
@@ -241,16 +298,28 @@ export class FixtureProvider implements MetadataProvider {
     return page(all.sort((a, b) => b.popularity - a.popularity).map(summary));
   }
 
-  async discover(category: DiscoverCategory, _sort: DiscoverSort): Promise<PagedResult<MediaSummary>> {
+  async discover(category: DiscoverCategory, sort: DiscoverSort, _page = 1, filters: DiscoverFilters = {}): Promise<PagedResult<MediaSummary>> {
     const all = [...SHOWS, ...MOVIES];
-    const filtered =
+    const today = new Date().toISOString().slice(0, 10);
+    let filtered =
       category === 'anime' ? all.filter((m) => m.isAnime) : category === 'shows' ? all.filter((m) => m.type === 'show' && !m.isAnime) : all.filter((m) => m.type === 'movie' && !m.isAnime);
+    if (filters.genreIds?.length) filtered = filtered.filter((m) => filters.genreIds!.every((g) => m.genres.some((x) => x.id === g)));
+    if (sort === 'upcoming') filtered = filtered.filter((m) => m.releaseDate && m.releaseDate > today);
+    if (sort === 'airing') filtered = filtered.filter((m) => m.type === 'show' && m.status === 'Returning Series');
+    if (sort === 'top_rated') filtered.sort((a, b) => b.voteAverage - a.voteAverage);
+    else if (sort === 'newest') filtered.sort((a, b) => (b.releaseDate ?? '').localeCompare(a.releaseDate ?? ''));
+    else filtered.sort((a, b) => b.popularity - a.popularity);
     return page(filtered.map(summary));
   }
 
-  async getShow(externalId: number): Promise<ShowDetails | null> {
+  async getShow(externalId: number, options: { seasons?: SeasonSelection } = {}): Promise<ShowDetails | null> {
     const s = SHOWS.find((x) => x.externalId === externalId);
-    return s ? structuredClone(s) : null;
+    if (!s) return null;
+    const copy = structuredClone(s);
+    const selection = options.seasons ?? 'all';
+    const wanted = selection === 'all' ? null : typeof selection === 'function' ? selection(copy.seasons) : selection;
+    if (wanted) copy.seasonDetails = copy.seasonDetails.filter((d) => wanted.includes(d.seasonNumber));
+    return copy;
   }
 
   async getSeason(showExternalId: number, seasonNumber: number): Promise<SeasonDetails | null> {
@@ -267,5 +336,48 @@ export class FixtureProvider implements MetadataProvider {
   async getEpisodeGuestStars(showExternalId: number, seasonNumber: number, episodeNumber: number): Promise<CastMember[]> {
     const season = await this.getSeason(showExternalId, seasonNumber);
     return season?.episodes.find((e) => e.episodeNumber === episodeNumber)?.guestStars ?? [];
+  }
+
+  async getPerson(externalId: number): Promise<PersonDetails | null> {
+    const roles = [...SHOWS, ...MOVIES].flatMap((m) => m.cast.filter((c) => c.externalPersonId === externalId).map((c) => ({ m, c })));
+    const first = roles[0];
+    if (!first) return null;
+    return {
+      provider: 'fixture',
+      externalId,
+      name: first.c.name,
+      biography: `${first.c.name} is a fictional performer used for development. Best known as ${first.c.character} in ${first.m.title}.`,
+      birthday: '1990-04-12',
+      deathday: null,
+      placeOfBirth: 'Fixture City',
+      profilePath: null,
+      knownForDepartment: 'Acting',
+      alsoKnownAs: [],
+      homepage: null,
+      imdbId: null,
+      images: [],
+      credits: roles.map(({ m, c }) => ({
+        type: m.type,
+        externalId: m.externalId,
+        title: m.title,
+        posterPath: m.posterPath,
+        backdropPath: m.backdropPath,
+        releaseDate: m.releaseDate,
+        role: c.character,
+        department: 'cast' as const,
+        episodeCount: c.episodeCount,
+        popularity: m.popularity,
+        voteAverage: m.voteAverage,
+        voteCount: m.voteCount,
+        genreIds: m.genres.map((g) => g.id),
+        isAnime: m.isAnime,
+      })),
+    };
+  }
+
+  async getGenres(type: MediaType): Promise<Genre[]> {
+    const seen = new Map<number, Genre>();
+    for (const m of [...SHOWS, ...MOVIES]) if (m.type === type) for (const g of m.genres) seen.set(g.id, g);
+    return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 }

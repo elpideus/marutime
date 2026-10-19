@@ -2,12 +2,16 @@ import {
   and,
   animeDetails,
   characters,
+  count,
   episodeCharacters,
   episodes,
   eq,
+  getDb,
+  max,
   media,
   seasons,
   type DbExecutor,
+  type Episode,
   type Media,
 } from '@marutime/db';
 import {
@@ -17,11 +21,14 @@ import {
   type CastMember,
   type MediaDetails,
   type MetadataProvider,
+  type SeasonSummary,
   type ShowDetails,
 } from '@marutime/metadata';
 import { sql } from 'drizzle-orm';
+import { acquireLease, releaseLease, runInBackground } from '../cache';
 import { errors } from '../errors';
-import { chunk } from '../utils';
+import { chunk, todayIso } from '../utils';
+import { getEpisode } from './queries';
 
 /** Reference the proposed row inside ON CONFLICT DO UPDATE. */
 const excluded = (column: string) => sql.raw(`excluded.${column}`);
@@ -35,15 +42,28 @@ export type EnsureMediaOptions = {
   anilist?: AniListClient | null;
   /** Skip AniList enrichment (e.g. in bulk jobs). */
   skipEnrichment?: boolean;
+  /** Block on a refresh of stale data instead of serving it and refreshing in the background. */
+  wait?: boolean;
 };
 
-function ttlFor(row: Pick<Media, 'type' | 'status' | 'releaseDate' | 'nextEpisodeAirDate'>): number {
+const daysAgo = (n: number) => new Date(Date.now() - n * DAY).toISOString().slice(0, 10);
+
+/**
+ * How long a synced title stays fresh. Old, finished things almost never
+ * change upstream, so they are refreshed rarely; anything airing is checked
+ * often enough to pick up new episodes the day they are listed.
+ */
+function ttlFor(row: Pick<Media, 'type' | 'status' | 'releaseDate' | 'lastAirDate' | 'nextEpisodeAirDate'>): number {
+  const today = todayIso();
   if (row.type === 'movie') {
-    const upcoming = row.releaseDate && row.releaseDate >= new Date().toISOString().slice(0, 10);
-    return upcoming ? DAY : 7 * DAY;
+    if (!row.releaseDate || row.releaseDate >= today) return DAY;
+    if (row.releaseDate >= daysAgo(60)) return 3 * DAY;
+    return 30 * DAY;
   }
-  if (row.status === 'Ended' || row.status === 'Canceled') return 7 * DAY;
-  return 12 * HOUR;
+  if (row.status === 'Ended' || row.status === 'Canceled') return 30 * DAY;
+  const soon = row.nextEpisodeAirDate && row.nextEpisodeAirDate <= new Date(Date.now() + 7 * DAY).toISOString().slice(0, 10);
+  const recent = row.lastAirDate && row.lastAirDate >= daysAgo(14);
+  return soon || recent ? 12 * HOUR : 3 * DAY;
 }
 
 export function isStale(row: Media): boolean {
@@ -55,9 +75,16 @@ function cleanCharacterName(name: string): string {
   return name.replace(/\s*\((?:voice|uncredited|archive footage)[^)]*\)\s*/gi, '').trim() || name;
 }
 
+const refreshing = new Set<string>();
+
 /**
  * Fetch (or refresh) a show/movie from the metadata provider and persist it
- * with seasons, episodes and characters. Cheap when the row is fresh.
+ * with seasons, episodes and characters.
+ *
+ * Fresh rows return immediately. Stale rows are also returned immediately and
+ * refreshed in the background by one server instance at a time
+ * (stale-while-revalidate), so a page never waits on TMDB for a title it has
+ * seen before. Only never-seen titles (or `force`/`wait`) block.
  */
 export async function ensureMedia(db: DbExecutor, type: 'show' | 'movie', externalId: number, opts: EnsureMediaOptions = {}): Promise<Media> {
   const provider = opts.provider ?? getMetadataProvider();
@@ -67,14 +94,105 @@ export async function ensureMedia(db: DbExecutor, type: 'show' | 'movie', extern
     .where(and(eq(media.provider, provider.id), eq(media.externalId, externalId), eq(media.type, type)))
     .limit(1);
   const current = existing[0] ?? null;
-  if (current && !opts.force && !isStale(current)) return current;
+  if (current && !opts.force) {
+    if (!isStale(current)) return current;
+    if (!opts.wait) {
+      scheduleRefresh(current, opts);
+      return current;
+    }
+  }
+  return syncFromProvider(db, type, externalId, current, opts);
+}
 
-  const details = type === 'show' ? await provider.getShow(externalId, { seasons: 'all' }) : await provider.getMovie(externalId);
+/**
+ * Episode lookup for scrobblers and deep links: when the episode is not known
+ * yet (it may have been listed upstream minutes ago), re-sync the show once
+ * and look again. Throttled to one forced sync per show per hour.
+ */
+export async function ensureEpisode(db: DbExecutor, showExternalId: number, seasonNumber: number, episodeNumber: number): Promise<{ media: Media; episode: Episode | null }> {
+  let show = await ensureMedia(db, 'show', showExternalId);
+  let episode = await getEpisode(db, show.id, seasonNumber, episodeNumber);
+  if (!episode && (!show.syncedAt || Date.now() - show.syncedAt.getTime() > HOUR)) {
+    show = await ensureMedia(db, 'show', showExternalId, { force: true });
+    episode = await getEpisode(db, show.id, seasonNumber, episodeNumber);
+  }
+  return { media: show, episode };
+}
+
+function scheduleRefresh(current: Media, opts: EnsureMediaOptions): void {
+  const key = `sync:${current.provider}:${current.type}:${current.externalId}`;
+  if (refreshing.has(key)) return;
+  refreshing.add(key);
+  runInBackground(async () => {
+    try {
+      if (!(await acquireLease(key, 180))) return;
+      try {
+        await syncFromProvider(getDb(), current.type, current.externalId, current, opts);
+      } finally {
+        await releaseLease(key);
+      }
+    } finally {
+      refreshing.delete(key);
+    }
+  });
+}
+
+async function syncFromProvider(db: DbExecutor, type: 'show' | 'movie', externalId: number, current: Media | null, opts: EnsureMediaOptions): Promise<Media> {
+  const provider = opts.provider ?? getMetadataProvider();
+  let details: MediaDetails | null;
+  if (type === 'show') {
+    // First import and forced re-syncs take every season. Routine refreshes
+    // only re-fetch seasons that can still change, plus a full pass monthly.
+    const fullKey = `fullsync:${provider.id}:${externalId}`;
+    const monthly = 30 * 24 * 60 * 60;
+    const full = !current || opts.force ? await acquireLease(fullKey, monthly, { force: true }) : await acquireLease(fullKey, monthly);
+    details = await provider.getShow(externalId, { seasons: full || !current ? 'all' : await seasonsToRefresh(db, current.id) });
+  } else {
+    details = await provider.getMovie(externalId);
+  }
   if (!details) {
-    if (current) return current;
+    if (current) {
+      // Removed or temporarily missing upstream: keep serving what we have.
+      await db.update(media).set({ syncedAt: new Date() }).where(eq(media.id, current.id));
+      return current;
+    }
     throw errors.notFound(type === 'show' ? 'Show' : 'Movie');
   }
   return syncMediaDetails(db, details, opts);
+}
+
+/**
+ * Pick the seasons worth re-fetching on a routine refresh: new seasons,
+ * seasons whose episode count changed, the latest season, and any season with
+ * episodes that aired recently or have no date yet (names, synopses and stills
+ * for those are still being filled in upstream).
+ */
+async function seasonsToRefresh(db: DbExecutor, mediaId: number): Promise<(list: SeasonSummary[]) => number[]> {
+  const stored = await db
+    .select({
+      seasonNumber: episodes.seasonNumber,
+      n: count(),
+      lastAir: max(episodes.airDate),
+      undated: sql<number>`count(*) filter (where ${episodes.airDate} is null)`.mapWith(Number),
+    })
+    .from(episodes)
+    .where(eq(episodes.mediaId, mediaId))
+    .groupBy(episodes.seasonNumber);
+  const bySeason = new Map(stored.map((r) => [r.seasonNumber, r]));
+  const recent = daysAgo(120);
+  return (list) => {
+    const latest = Math.max(0, ...list.filter((s) => s.seasonNumber > 0).map((s) => s.seasonNumber));
+    return list
+      .filter((s) => {
+        const have = bySeason.get(s.seasonNumber);
+        if (!have) return true;
+        if (have.n !== s.episodeCount) return true;
+        if (s.seasonNumber >= latest) return true;
+        if (have.undated > 0) return true;
+        return Boolean(have.lastAir && have.lastAir >= recent);
+      })
+      .map((s) => s.seasonNumber);
+  };
 }
 
 export async function syncMediaDetails(db: DbExecutor, details: MediaDetails, opts: EnsureMediaOptions = {}): Promise<Media> {
@@ -353,6 +471,8 @@ export async function enrichAnime(db: DbExecutor, row: Media, client: AniListCli
     name: c.name,
     nativeName: c.nativeName,
     actorName: c.voiceActor,
+    voiceActorId: c.voiceActorId,
+    voiceActorImageUrl: c.voiceActorImageUrl,
     imageUrl: c.imageUrl,
     role: c.role,
     sortOrder: i,
@@ -365,7 +485,16 @@ export async function enrichAnime(db: DbExecutor, row: Media, client: AniListCli
       .values(batch)
       .onConflictDoUpdate({
         target: [characters.mediaId, characters.source, characters.externalKey],
-        set: { name: excluded('name'), nativeName: excluded('native_name'), actorName: excluded('actor_name'), imageUrl: excluded('image_url'), role: excluded('role'), sortOrder: excluded('sort_order') },
+        set: {
+          name: excluded('name'),
+          nativeName: excluded('native_name'),
+          actorName: excluded('actor_name'),
+          voiceActorId: excluded('voice_actor_id'),
+          voiceActorImageUrl: excluded('voice_actor_image_url'),
+          imageUrl: excluded('image_url'),
+          role: excluded('role'),
+          sortOrder: excluded('sort_order'),
+        },
       });
   }
   return enrichment;

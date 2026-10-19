@@ -1,8 +1,10 @@
 import { listApiTokens } from '@marutime/auth';
+import { isApiAvailable } from '@marutime/core';
 import { getDb } from '@marutime/db';
 import { Island, IslandHeader } from '@marutime/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { ApiTokensPanel } from '@/components/settings/account-forms';
 import { requireUser } from '@/lib/session';
 
@@ -10,6 +12,7 @@ export const metadata: Metadata = { title: 'API tokens' };
 
 export default async function TokensPage() {
   const user = await requireUser('/settings/tokens');
+  if (!(await isApiAvailable(getDb(), user))) notFound();
   const tokens = await listApiTokens(getDb(), user.id);
   return (
     <Island>

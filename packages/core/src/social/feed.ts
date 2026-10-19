@@ -42,7 +42,7 @@ async function loadFeed(db: DbExecutor, where: ReturnType<typeof and>, limit: nu
       preferences: users.preferences,
       media,
       episode: episodes,
-      list: { id: lists.id, title: lists.title, slug: lists.slug, visibility: lists.visibility, ownerId: lists.ownerId },
+      list: { id: lists.id, title: lists.title, slug: lists.slug, visibility: lists.visibility, ownerId: lists.ownerId, deletedAt: lists.deletedAt },
       targetUser: {
         id: targetUsers.id,
         username: targetUsers.username,
@@ -72,23 +72,24 @@ async function loadFeed(db: DbExecutor, where: ReturnType<typeof and>, limit: nu
   const page = rows.slice(0, limit);
   const items: FeedItem[] = page
     .filter((r) => r.preferences.showActivity !== false)
-    .filter((r) => !r.list || r.list.visibility === 'public')
+    .filter((r) => !r.list || !r.list.id || (r.list.visibility === 'public' && !r.list.deletedAt))
     .map((r) => ({
       activity: r.activity,
       user: r.user as PublicUser,
       media: r.media,
       episode: r.episode,
-      list: r.list && r.list.id ? r.list : null,
+      list: r.list && r.list.id ? { id: r.list.id, title: r.list.title, slug: r.list.slug, visibility: r.list.visibility, ownerId: r.list.ownerId } : null,
       targetUser: r.targetUser && r.targetUser.id ? (r.targetUser as PublicUser) : null,
     }));
   const last = page[page.length - 1];
   return { items, nextCursor: rows.length > limit && last ? last.activity.createdAt.toISOString() : null };
 }
 
-/** Activities from people the user follows, plus their own. */
+/** Activities from people the user follows (never their own: that is what the profile is for). */
 export async function getHomeFeed(db: DbExecutor, userId: string, opts: { limit?: number; before?: string | null } = {}): Promise<FeedPage> {
   const limit = Math.min(opts.limit ?? 25, 60);
-  const ids = [...(await getFollowingIds(db, userId)), userId];
+  const ids = (await getFollowingIds(db, userId)).filter((id) => id !== userId);
+  if (ids.length === 0) return { items: [], nextCursor: null };
   const where = and(inArray(activities.userId, ids), opts.before ? lt(activities.createdAt, new Date(opts.before)) : undefined, eq(users.status, 'active'));
   return loadFeed(db, where, limit);
 }

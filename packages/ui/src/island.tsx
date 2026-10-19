@@ -35,12 +35,12 @@ export const Island = forwardRef<HTMLDivElement, IslandProps>(function Island(
     <Comp
       ref={ref}
       whileHover={interactive ? hoverLift : undefined}
-      transition={springs.gentle}
+      transition={springs.bouncy}
       className={cn(
         'relative rounded-island border shadow-island',
         tones[tone],
         paddings[padding],
-        interactive && 'cursor-pointer transition-colors hover:border-border-strong hover:bg-surface-2',
+        interactive && 'cursor-pointer transition-colors duration-200 hover:border-border-strong hover:bg-surface-2',
         className,
       )}
       {...rest}

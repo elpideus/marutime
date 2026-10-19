@@ -55,7 +55,7 @@ export function ImageUploader({ kind, current, name }: { kind: 'avatar' | 'cover
               <Camera className="size-4" /> {url ? 'Change cover' : 'Add cover'}
             </Button>
             {url ? (
-              <Button size="icon-sm" variant="secondary" onClick={remove} aria-label="Remove cover">
+              <Button size="icon-sm" variant="secondary" onClick={remove} aria-label="Remove cover" tooltip="Remove cover image">
                 <Trash className="size-4" />
               </Button>
             ) : null}
