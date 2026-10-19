@@ -53,7 +53,7 @@ export function Landing({ trending, activity }: { trending: MediaCardData[]; act
 
       <section>
         <h2 className="mb-4 text-lg font-semibold tracking-tight text-fg">Built like a good remote: everything within reach</h2>
-        <motion.div variants={stagger(0.05)} initial="hidden" whileInView="show" viewport={{ once: true, margin: '-80px' }} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f) => (
             <motion.div key={f.title} variants={fadeUp}>
               <Island className="h-full">

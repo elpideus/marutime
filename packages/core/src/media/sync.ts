@@ -126,8 +126,9 @@ export async function syncMediaDetails(db: DbExecutor, details: MediaDetails, op
     .returning();
   const saved = row!;
 
-  if (details.type === 'show') await syncSeasons(db, saved.id, details);
+  // Main cast first so a regular who also appears as a guest star keeps kind = main.
   await syncCharacters(db, saved.id, details.cast, 'main');
+  if (details.type === 'show') await syncSeasons(db, saved.id, details);
 
   if (saved.isAnime && !opts.skipEnrichment && opts.anilist !== null) {
     try {
@@ -260,20 +261,36 @@ async function syncCharacters(db: DbExecutor, mediaId: number, cast: CastMember[
   }
   for (const batch of chunk(values, 200)) {
     if (batch.length === 0) continue;
-    const rows = await db
-      .insert(characters)
-      .values(batch)
-      .onConflictDoUpdate({
-        target: [characters.mediaId, characters.source, characters.externalKey],
-        set: {
-          actorName: excluded('actor_name'),
-          profilePath: excluded('profile_path'),
-          sortOrder: excluded('sort_order'),
-          episodeCount: excluded('episode_count'),
-        },
-      })
-      .returning({ id: characters.id, externalKey: characters.externalKey });
+    const rows =
+      kind === 'main'
+        ? await db
+            .insert(characters)
+            .values(batch)
+            .onConflictDoUpdate({
+              target: [characters.mediaId, characters.source, characters.externalKey],
+              set: {
+                actorName: excluded('actor_name'),
+                profilePath: excluded('profile_path'),
+                sortOrder: excluded('sort_order'),
+                episodeCount: excluded('episode_count'),
+                kind: sql.raw(`'main'`),
+              },
+            })
+            .returning({ id: characters.id, externalKey: characters.externalKey })
+        : await db
+            .insert(characters)
+            .values(batch)
+            .onConflictDoNothing({ target: [characters.mediaId, characters.source, characters.externalKey] })
+            .returning({ id: characters.id, externalKey: characters.externalKey });
     for (const r of rows) out.set(r.externalKey, r.id);
+  }
+  // ON CONFLICT DO NOTHING returns no row for existing characters; look those up.
+  if (out.size < values.length) {
+    const existing = await db
+      .select({ id: characters.id, externalKey: characters.externalKey })
+      .from(characters)
+      .where(and(eq(characters.mediaId, mediaId), eq(characters.source, 'tmdb')));
+    for (const r of existing) if (!out.has(r.externalKey)) out.set(r.externalKey, r.id);
   }
   return out;
 }
