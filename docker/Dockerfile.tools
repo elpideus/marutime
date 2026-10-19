@@ -1,0 +1,17 @@
+# Full workspace image for running migrations, seeds, backups and restores.
+FROM node:22-alpine
+ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
+RUN corepack enable && apk add --no-cache libc6-compat
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+COPY apps/web/package.json apps/web/
+COPY packages/auth/package.json packages/auth/
+COPY packages/config/package.json packages/config/
+COPY packages/core/package.json packages/core/
+COPY packages/db/package.json packages/db/
+COPY packages/metadata/package.json packages/metadata/
+COPY packages/storage/package.json packages/storage/
+COPY packages/ui/package.json packages/ui/
+RUN pnpm install --frozen-lockfile
+COPY . .
+CMD ["pnpm", "db:migrate"]

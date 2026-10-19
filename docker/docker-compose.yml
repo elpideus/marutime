@@ -1,0 +1,93 @@
+# Self-hosted MaruTime: web app + PostgreSQL + nightly pg_dump.
+# Usage:  cp .env.example .env  →  edit  →  docker compose -f docker/docker-compose.yml up -d
+# First run (migrations + seed) uses the "tools" image built from the repo:
+#   docker compose -f docker/docker-compose.yml run --rm tools pnpm db:migrate
+#   docker compose -f docker/docker-compose.yml run --rm tools pnpm db:seed
+name: marutime
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: marutime
+      POSTGRES_USER: marutime
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-marutime}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U marutime -d marutime']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgres://marutime:${POSTGRES_PASSWORD:-marutime}@db:5432/marutime
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      STORAGE_LOCAL_DIR: /app/data/uploads
+      PORT: 3000
+    ports:
+      - '${PORT:-3000}:3000'
+    volumes:
+      - uploads:/app/data
+
+  # Development/ops image with the full workspace (migrations, seed, backup, restore).
+  tools:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.tools
+    profiles: ['tools']
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgres://marutime:${POSTGRES_PASSWORD:-marutime}@db:5432/marutime
+      STORAGE_LOCAL_DIR: /app/data/uploads
+    volumes:
+      - uploads:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Belt and braces: a plain pg_dump every night in addition to the app's logical backups.
+  pgbackup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-marutime}
+    volumes:
+      - pg-backups:/backups
+      - ./pgbackup.sh:/pgbackup.sh:ro
+    entrypoint: ['/bin/sh', '/pgbackup.sh']
+
+  # Daily cron hitting the app's maintenance endpoints (same thing Vercel Cron does).
+  cron:
+    image: curlimages/curl:8.10.1
+    restart: unless-stopped
+    depends_on:
+      - web
+    env_file: ../.env
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          sleep 86400
+          curl -fsS -H "Authorization: Bearer $$CRON_SECRET" http://web:3000/api/cron/backup || true
+          curl -fsS -H "Authorization: Bearer $$CRON_SECRET" http://web:3000/api/cron/sync || true
+        done
+
+volumes:
+  db-data:
+  uploads:
+  pg-backups:

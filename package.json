@@ -1,0 +1,36 @@
+{
+  "name": "marutime",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MaruTime: a modern, social tracker for shows, movies and anime.",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @marutime/web dev",
+    "build": "pnpm --filter @marutime/web build",
+    "start": "pnpm --filter @marutime/web start",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "db:generate": "pnpm --filter @marutime/db generate",
+    "db:migrate": "pnpm --filter @marutime/db migrate",
+    "db:seed": "pnpm --filter @marutime/core seed",
+    "db:studio": "pnpm --filter @marutime/db studio",
+    "backup": "pnpm --filter @marutime/core backup",
+    "restore": "pnpm --filter @marutime/core restore"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
+  }
+}

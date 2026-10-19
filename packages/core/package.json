@@ -1,0 +1,31 @@
+{
+  "name": "@marutime/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "backup": "tsx src/scripts/backup.ts",
+    "restore": "tsx src/scripts/restore.ts",
+    "seed": "tsx src/scripts/seed.ts",
+    "smoke": "tsx src/scripts/smoke.ts",
+    "dev-session": "tsx src/scripts/dev-session.ts"
+  },
+  "dependencies": {
+    "@marutime/auth": "workspace:*",
+    "@marutime/config": "workspace:*",
+    "@marutime/db": "workspace:*",
+    "@marutime/metadata": "workspace:*",
+    "@marutime/storage": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

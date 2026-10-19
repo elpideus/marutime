@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+.next
+**/.next
+.git
+data
+backups
+.env
+.env.*
+!.env.example
+*.log
