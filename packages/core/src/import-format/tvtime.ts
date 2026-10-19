@@ -99,7 +99,7 @@ export function parseTvTime(files: Record<string, string>): ImportItemInput[] {
   /**
    * Shows in the TV Time library. TV Time "follows" everything you add, so
    * this is not a follow here: unstarted ones go on the watchlist, watched
-   * ones bring their history, and only favourites are followed.
+   * ones bring their history, and only favourites you watched are followed.
    */
   const library = new Set<string>();
   const movies = new Map<string, MovieAcc>();
@@ -243,7 +243,7 @@ export function parseTvTime(files: Record<string, string>): ImportItemInput[] {
   const showItems: ImportItemInput[] = [...shows.values()]
     .filter((s) => library.has(s.key) || s.watchlist || s.favorite || s.episodes.length > 0 || listed.has(s.key))
     // The watchlist entry only sticks if nothing turns out to be watched; archived ("stopped watching") shows stay off it.
-    .map(({ seen: _seen, ...s }) => ({ ...s, follow: s.favorite, watchlist: (s.watchlist || library.has(s.key)) && s.status !== 'dropped', episodes: s.episodes.slice(0, 6000) }));
+    .map(({ seen: _seen, ...s }) => ({ ...s, follow: false, watchlist: (s.watchlist || library.has(s.key)) && s.status !== 'dropped', episodes: s.episodes.slice(0, 6000) }));
   const movieItems: ImportItemInput[] = [...movies.values()]
     .filter((m) => m.watched || m.watchlist)
     .map(({ watched, rewatches, ...m }) => ({ ...m, watches: watched ? [...m.watches, ...rewatches].slice(0, 200) : [], watchlist: m.watchlist && !watched }));

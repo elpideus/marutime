@@ -181,10 +181,11 @@ export async function importShow(ctx: ApplyContext, item: ImportShow): Promise<v
   const { inserted, hadAny } = await insertViewings(ctx, show.id, viewings);
   const watchedAny = hadAny || inserted.length > 0;
 
-  // Only follow what the source says is being followed (AniList's watching/paused/dropped/completed) or
-  // marked as a favourite. Watched episodes alone don't make a follow: the history is enough, and a
-  // tracker that follows everything in your library (TV Time) would otherwise flood "Watch next".
-  if (item.follow || item.favorite) {
+  // Only follow what the source says is being followed (AniList's watching/paused/dropped/completed),
+  // or a favourite you have actually watched. Watched episodes alone don't make a follow, and nothing
+  // unstarted from a tracker that follows everything in your library (TV Time) gets followed: it goes
+  // on the watchlist instead.
+  if (item.follow || (item.favorite && watchedAny)) {
     const finished = watchedAny && (await checkShowFinished(ctx.db, ctx.user.id, show));
     // An explicit "completed" covers what the source tracked; if the show has more, it is still being watched.
     const status = finished ? 'completed' : item.status && item.status !== 'completed' ? item.status : 'watching';

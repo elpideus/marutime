@@ -58,9 +58,9 @@ test('parseTvTime turns an export into shows, movies and lists', () => {
     ],
   );
 
-  // Favourites are the one thing that is followed.
+  // A favourite keeps its star, but TV Time never makes a follow (the importer follows favourites you watched).
   const tide = items.find((i) => i.kind === 'show' && i.ids.tvdb === 9003);
-  assert.ok(tide && tide.kind === 'show' && tide.watchlist && tide.favorite && tide.follow);
+  assert.ok(tide && tide.kind === 'show' && tide.watchlist && tide.favorite && !tide.follow);
   // Archived ("stopped watching") stays off the watchlist.
   const lantern = items.find((i) => i.kind === 'show' && i.ids.tvdb === 9002);
   assert.ok(lantern && lantern.kind === 'show' && lantern.status === 'dropped' && !lantern.watchlist && !lantern.follow);
