@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm --filter @marutime/db migrate:deploy && next build",
+    "build": "pnpm --filter @marutime/db migrate:deploy && pnpm --filter @marutime/core bootstrap:deploy && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json"

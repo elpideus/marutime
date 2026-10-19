@@ -40,7 +40,7 @@ ADMIN_EMAIL=you@example.com ADMIN_USERNAME=you ADMIN_PASSWORD='…' pnpm db:seed
 ```
 Then sign in at `/login`, change your password in *Settings → Account*, and fill *Admin → Settings → Legal identity*.
 
-After that, Vercel keeps the schema current by itself: a **production** build runs `pnpm --filter @marutime/db migrate:deploy` before `next build`, which applies any pending migrations. If a migration fails, the build fails and the previous deployment stays live. Preview builds share the production database, so they never migrate. Keep migrations additive (new tables, nullable or defaulted columns) so an instant rollback to the previous deployment still works against the newer schema.
+After that, Vercel keeps the schema current by itself: a **production** build runs `pnpm --filter @marutime/db migrate:deploy` before `next build`, which applies any pending migrations. It then runs `pnpm --filter @marutime/core bootstrap:deploy`, which fills an empty database with the default devices, services and settings, and creates an admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (optional `ADMIN_USERNAME`) while no admin exists. So pointing `DATABASE_URL` at a brand-new database and redeploying is enough; remove `ADMIN_PASSWORD` once you have signed in. If a migration fails, the build fails and the previous deployment stays live. Preview builds share the production database, so they never migrate. Keep migrations additive (new tables, nullable or defaulted columns) so an instant rollback to the previous deployment still works against the newer schema.
 
 > Migration `0002_import_jobs` adds the `import_jobs` table for TV Time and AniList imports; production builds on Vercel apply it automatically.
 

@@ -13,6 +13,7 @@
     "backup": "tsx src/scripts/backup.ts",
     "restore": "tsx src/scripts/restore.ts",
     "seed": "tsx src/scripts/seed.ts",
+    "bootstrap:deploy": "tsx src/scripts/bootstrap-deploy.ts",
     "smoke": "tsx src/scripts/smoke.ts",
     "dev-session": "tsx src/scripts/dev-session.ts"
   },
