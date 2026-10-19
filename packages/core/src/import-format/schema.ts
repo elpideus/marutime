@@ -46,7 +46,9 @@ export const importShowSchema = z.object({
   ids,
   /** Explicit status from the source; otherwise derived from what was watched. */
   status: z.enum(['watching', 'on_hold', 'dropped', 'completed']).optional(),
+  /** Follow it here (it shows up in "Watch next"). Watched episodes are imported either way. */
   follow: z.boolean().default(false),
+  /** Put it on the watchlist if nothing of it turns out to be watched. */
   watchlist: z.boolean().default(false),
   favorite: z.boolean().default(false),
   addedAt: epoch.optional(),

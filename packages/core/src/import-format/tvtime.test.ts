@@ -43,7 +43,9 @@ test('parseTvTime turns an export into shows, movies and lists', () => {
 
   const harbor = items.find((i) => i.kind === 'show' && i.ids.tvdb === 9001);
   assert.ok(harbor && harbor.kind === 'show');
-  assert.equal(harbor.follow, true);
+  // In the TV Time library but not a favourite: not followed. It is a watchlist candidate, which only sticks if nothing is watched.
+  assert.equal(harbor.follow, false);
+  assert.equal(harbor.watchlist, true);
   assert.equal(harbor.addedAt, 1556668800);
   // Two first viewings, one rewatch, and the older-format watch of S2E1.
   assert.deepEqual(
@@ -56,10 +58,12 @@ test('parseTvTime turns an export into shows, movies and lists', () => {
     ],
   );
 
+  // Favourites are the one thing that is followed.
   const tide = items.find((i) => i.kind === 'show' && i.ids.tvdb === 9003);
-  assert.ok(tide && tide.kind === 'show' && tide.watchlist && tide.favorite);
+  assert.ok(tide && tide.kind === 'show' && tide.watchlist && tide.favorite && tide.follow);
+  // Archived ("stopped watching") stays off the watchlist.
   const lantern = items.find((i) => i.kind === 'show' && i.ids.tvdb === 9002);
-  assert.ok(lantern && lantern.kind === 'show' && lantern.status === 'dropped');
+  assert.ok(lantern && lantern.kind === 'show' && lantern.status === 'dropped' && !lantern.watchlist && !lantern.follow);
 
   const orbit = items.find((i) => i.kind === 'movie' && i.title === 'The Quiet Orbit');
   assert.ok(orbit && orbit.kind === 'movie');

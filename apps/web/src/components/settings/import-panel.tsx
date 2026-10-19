@@ -97,7 +97,7 @@ export function ImportPanel({ initialJobs }: { initialJobs: Job[] }) {
 
   return (
     <Island>
-      <IslandHeader title="Import from another tracker" description="Bring your history over: shows you follow, every episode and movie you watched (with dates), your watchlist and lists. Importing twice never doubles anything." />
+      <IslandHeader title="Import from another tracker" description="Bring your history over: every episode and movie you watched (with dates), your watchlist, favourites and lists. Shows you haven't started go on your watchlist rather than being followed. Importing twice never doubles anything." />
       <AnimatePresence mode="wait" initial={false}>
         {current ? (
           <motion.div key="progress" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={springs.smooth}>

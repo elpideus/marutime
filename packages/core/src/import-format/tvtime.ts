@@ -13,7 +13,7 @@ import type { ImportItemInput, ImportList, ImportMovie, ImportShow } from './sch
  *   older episode watches
  * - seen_episode.csv / watched_on_episode.csv: episode watches in older exports
  * - followed_tv_show.csv, user_tv_show_data.csv, user_show_special_status.csv:
- *   follows, favourites, watch-later
+ *   library membership, favourites, watch-later
  * - lists-prod-lists.csv: custom lists and favourites
  */
 export const TVTIME_FILES = [
@@ -96,6 +96,12 @@ function goField(map: string, name: string, next: string[]): string | null {
 
 export function parseTvTime(files: Record<string, string>): ImportItemInput[] {
   const shows = new Map<string, ShowAcc>();
+  /**
+   * Shows in the TV Time library. TV Time "follows" everything you add, so
+   * this is not a follow here: unstarted ones go on the watchlist, watched
+   * ones bring their history, and only favourites are followed.
+   */
+  const library = new Set<string>();
   const movies = new Map<string, MovieAcc>();
   const seenEpisodes = new Set<number>();
 
@@ -135,7 +141,7 @@ export function parseTvTime(files: Record<string, string>): ImportItemInput[] {
     } else if (kind.startsWith('user-series')) {
       const s = show(int(r.s_id), r.series_name ?? '');
       if (!s) continue;
-      s.follow ||= truthy(r.is_followed);
+      if (truthy(r.is_followed)) library.add(s.key);
       s.watchlist ||= truthy(r.is_for_later);
       if (truthy(r.is_archived)) s.status = 'dropped';
       s.addedAt ??= toEpoch(r.followed_at) ?? toEpoch(r.created_at);
@@ -182,7 +188,7 @@ export function parseTvTime(files: Record<string, string>): ImportItemInput[] {
   for (const r of csvRecords(files['followed_tv_show.csv'])) {
     const s = show(int(r.tv_show_id), r.tv_show_name ?? '');
     if (!s) continue;
-    if (truthy(r.active) || r.active === undefined) s.follow = true;
+    if (truthy(r.active) || r.active === undefined) library.add(s.key);
     if (truthy(r.archived)) s.status ??= 'dropped';
     s.addedAt ??= toEpoch(r.created_at);
   }
@@ -190,7 +196,7 @@ export function parseTvTime(files: Record<string, string>): ImportItemInput[] {
     const s = show(int(r.tv_show_id), r.tv_show_name ?? '');
     if (!s) continue;
     if (truthy(r.is_favorited)) s.favorite = true;
-    if (truthy(r.is_followed)) s.follow = true;
+    if (truthy(r.is_followed)) library.add(s.key);
   }
   for (const r of csvRecords(files['user_show_special_status.csv'])) {
     const s = show(int(r.tv_show_id), r.tv_show_name ?? '');
@@ -235,8 +241,9 @@ export function parseTvTime(files: Record<string, string>): ImportItemInput[] {
   }
 
   const showItems: ImportItemInput[] = [...shows.values()]
-    .filter((s) => s.follow || s.watchlist || s.favorite || s.episodes.length > 0 || listed.has(s.key))
-    .map(({ seen: _seen, ...s }) => ({ ...s, episodes: s.episodes.slice(0, 6000) }));
+    .filter((s) => library.has(s.key) || s.watchlist || s.favorite || s.episodes.length > 0 || listed.has(s.key))
+    // The watchlist entry only sticks if nothing turns out to be watched; archived ("stopped watching") shows stay off it.
+    .map(({ seen: _seen, ...s }) => ({ ...s, follow: s.favorite, watchlist: (s.watchlist || library.has(s.key)) && s.status !== 'dropped', episodes: s.episodes.slice(0, 6000) }));
   const movieItems: ImportItemInput[] = [...movies.values()]
     .filter((m) => m.watched || m.watchlist)
     .map(({ watched, rewatches, ...m }) => ({ ...m, watches: watched ? [...m.watches, ...rewatches].slice(0, 200) : [], watchlist: m.watchlist && !watched }));
