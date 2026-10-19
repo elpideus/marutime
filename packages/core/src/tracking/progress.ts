@@ -37,42 +37,53 @@ export type ShowProgress = {
   isUpToDate: boolean;
 };
 
-/** Per-show progress for a media page (ignores specials, season 0). */
+/**
+ * Per-show progress for a media page (ignores specials, season 0). Counted in
+ * the database: a page view reads a handful of rows however long the show is.
+ */
 export async function getShowProgress(db: DbExecutor, userId: string | null, mediaId: number): Promise<ShowProgress> {
   const today = todayIso();
-  const all = await db
-    .select()
-    .from(episodes)
-    .where(and(eq(episodes.mediaId, mediaId), gt(episodes.seasonNumber, 0)))
-    .orderBy(asc(episodes.seasonNumber), asc(episodes.episodeNumber));
-  const aired = all.filter((e) => e.airDate && e.airDate <= today);
-  const upcomingEpisode = all.find((e) => e.airDate && e.airDate > today) ?? null;
+  const regular = and(eq(episodes.mediaId, mediaId), gt(episodes.seasonNumber, 0));
+  const isAired = sql`${episodes.airDate} is not null and ${episodes.airDate} <= ${today}`;
+  const watchedByUser = userId ? sql`exists (select 1 from ${watches} w where w.user_id = ${userId} and w.episode_id = ${episodes.id})` : sql`false`;
+  const byOrder = [asc(episodes.seasonNumber), asc(episodes.episodeNumber)] as const;
 
-  if (!userId) {
-    return { mediaId, totalEpisodes: all.length, airedEpisodes: aired.length, watchedEpisodes: 0, remaining: aired.length, percent: 0, nextEpisode: aired[0] ?? null, upcomingEpisode, lastWatchedAt: null, isTracked: false, status: null, isUpToDate: false };
-  }
-
-  const watched = await db
-    .selectDistinct({ episodeId: watches.episodeId })
-    .from(watches)
-    .where(and(eq(watches.userId, userId), eq(watches.mediaId, mediaId), isNotNull(watches.episodeId)));
-  const watchedIds = new Set(watched.map((w) => w.episodeId));
-  const [tracking] = await db.select().from(showTracking).where(and(eq(showTracking.userId, userId), eq(showTracking.mediaId, mediaId))).limit(1);
-  const nextEpisode = aired.find((e) => !watchedIds.has(e.id)) ?? null;
-  const watchedAired = aired.filter((e) => watchedIds.has(e.id)).length;
+  const [[counts], [nextEpisode], [upcomingEpisode], watchedRows, trackingRows] = await Promise.all([
+    db
+      .select({
+        total: sql<number>`count(*)`.mapWith(Number),
+        aired: sql<number>`count(*) filter (where ${isAired})`.mapWith(Number),
+        watchedAired: sql<number>`count(*) filter (where ${isAired} and ${watchedByUser})`.mapWith(Number),
+      })
+      .from(episodes)
+      .where(regular),
+    db.select().from(episodes).where(and(regular, isAired, sql`not ${watchedByUser}`)).orderBy(...byOrder).limit(1),
+    db.select().from(episodes).where(and(regular, isNotNull(episodes.airDate), gt(episodes.airDate, today))).orderBy(...byOrder).limit(1),
+    userId
+      ? db
+          .select({ n: sql<number>`count(distinct ${watches.episodeId})`.mapWith(Number) })
+          .from(watches)
+          .where(and(eq(watches.userId, userId), eq(watches.mediaId, mediaId), isNotNull(watches.episodeId)))
+      : Promise.resolve([]),
+    userId ? db.select().from(showTracking).where(and(eq(showTracking.userId, userId), eq(showTracking.mediaId, mediaId))).limit(1) : Promise.resolve([]),
+  ]);
+  const aired = counts?.aired ?? 0;
+  const watchedAired = counts?.watchedAired ?? 0;
+  const tracking = trackingRows[0];
+  const next = nextEpisode ?? null;
   return {
     mediaId,
-    totalEpisodes: all.length,
-    airedEpisodes: aired.length,
-    watchedEpisodes: watchedIds.size,
-    remaining: aired.length - watchedAired,
-    percent: aired.length ? Math.round((watchedAired / aired.length) * 100) : 0,
-    nextEpisode,
-    upcomingEpisode,
+    totalEpisodes: counts?.total ?? 0,
+    airedEpisodes: aired,
+    watchedEpisodes: watchedRows[0]?.n ?? 0,
+    remaining: aired - watchedAired,
+    percent: aired ? Math.round((watchedAired / aired) * 100) : 0,
+    nextEpisode: next,
+    upcomingEpisode: upcomingEpisode ?? null,
     lastWatchedAt: tracking?.lastWatchedAt ?? null,
     isTracked: Boolean(tracking),
     status: tracking?.status ?? null,
-    isUpToDate: Boolean(tracking) && nextEpisode === null,
+    isUpToDate: Boolean(tracking) && next === null,
   };
 }
 

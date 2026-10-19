@@ -22,6 +22,9 @@ export function createDb(opts: CreateDbOptions): { db: Database; sql: postgres.S
     idle_timeout: 20,
     connect_timeout: 15,
     onnotice: () => {},
+    // Don't download the server's type catalogue on every new connection
+    // (hundreds of rows, repeated on each cold start); the built-in types cover everything we use.
+    fetch_types: false,
     debug: opts.debug,
   });
   const db = drizzle(sql, { schema, casing: 'snake_case' });
